@@ -3,6 +3,7 @@ pragma solidity ^0.8.27;
 
 import {QuarkBuilder} from "./QuarkBuilder.sol";
 import {CCTPBridgeActions} from "../BridgeScripts.sol";
+import {AcrossActions} from "../AcrossScripts.sol";
 
 import "./Strings.sol";
 
@@ -12,8 +13,11 @@ library BridgeRoutes {
         pure
         returns (bool)
     {
-        return CCTP.canBridge(srcChainId, dstChainId, assetSymbol);
+        return
+            CCTP.canBridge(srcChainId, dstChainId, assetSymbol) || Across.canBridge(srcChainId, dstChainId, assetSymbol);
     }
+
+    // TODO: GENERIC FUNCTION TO BRIDGE OVER FUNDS, PICKING THE BEST ROUTE
 }
 
 library CCTP {
@@ -93,6 +97,97 @@ library CCTP {
             knownDomainId(dstChainId),
             bytes32(uint256(uint160(recipient))),
             usdcAddress
+        );
+    }
+}
+
+// TODO: split into bridge sub-directory
+library Across {
+    error NoKnownBridge(string bridgeType, uint256 srcChainId);
+
+    struct AcrossChain {
+        uint256 chainId;
+        address bridge; // SpokePool contract
+    }
+
+    function knownChains() internal pure returns (AcrossChain[] memory) {
+        AcrossChain[] memory chains = new AcrossChain[](4);
+        // Mainnet
+        chains[0] = AcrossChain({chainId: 1, bridge: 0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5});
+        // Base
+        chains[1] = AcrossChain({chainId: 8453, bridge: 0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64});
+        // Sepolia
+        chains[2] = AcrossChain({chainId: 11155111, bridge: 0x5ef6C01E11889d86803e0B23e3cB3F9E9d97B662});
+        // Base Sepolia
+        chains[3] = AcrossChain({chainId: 84532, bridge: 0x82B564983aE7274c86695917BBf8C99ECb6F0F8F});
+        return chains;
+    }
+
+    function knownChain(uint256 chainId) internal pure returns (AcrossChain memory found) {
+        AcrossChain[] memory acrossChains = knownChains();
+        for (uint256 i = 0; i < acrossChains.length; ++i) {
+            if (acrossChains[i].chainId == chainId) {
+                return found = acrossChains[i];
+            }
+        }
+    }
+
+    // TODO
+    function canBridge(uint256 srcChainId, uint256 dstChainId, string memory assetSymbol)
+        internal
+        pure
+        returns (bool)
+    {
+        // TODO: FFI to across to figure out? probably not
+        //       OR maintain a list of supported bridgeable assets?
+        return knownChain(srcChainId).bridge != address(0) && knownChain(dstChainId).chainId == dstChainId;
+    }
+
+    function knownBridge(uint256 srcChainId) internal pure returns (address) {
+        AcrossChain memory chain = knownChain(srcChainId);
+        if (chain.bridge != address(0)) {
+            return chain.bridge;
+        } else {
+            revert NoKnownBridge("Across", srcChainId);
+        }
+    }
+
+    function bridgeScriptSource() internal pure returns (bytes memory) {
+        return type(AcrossActions).creationCode;
+    }
+
+    function encodeBridgeAction(
+        uint256 srcChainId,
+        uint256 dstChainId,
+        address inputToken,
+        address outputToken,
+        uint256 inputAmount,
+        uint256 outputAmount,
+        address recipient,
+        uint256 blockTimestamp,
+        bool useNativeToken
+    ) internal pure returns (bytes memory) {
+        return abi.encodeCall(
+            AcrossActions.depositV3,
+            (
+                knownBridge(srcChainId), // spokePool
+                // TODO: should be account? instead of recipient
+                recipient, // depositor
+                recipient, // recipient
+                inputToken, // inputToken
+                outputToken, // outputToken
+                inputAmount, // inputAmount
+                outputAmount, // outputAmount
+                dstChainId, // destinationChainId
+                address(0), // exclusiveRelayer
+                // TODO: need to get an exact quote timestamp
+                uint32(blockTimestamp), // quoteTimestamp
+                // TODO: 10 min for now, set as constant
+                uint32(blockTimestamp + 600), // fillDeadline
+                0, // exclusivityDeadline
+                new bytes(0), // message
+                useNativeToken // useNativeToken
+            )
         );
     }
 }

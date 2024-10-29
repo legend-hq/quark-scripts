@@ -195,21 +195,19 @@ contract QuarkBuilderTest {
             accountBalances: accountsBalances_(accounts, balances)
         });
 
-        uint256[] memory zeroBalances = new uint256[](accounts.length);
-
         assetPositionsList[2] = Accounts.AssetPositions({
             asset: weth_(chainId),
             symbol: "WETH",
             decimals: 18,
             usdPrice: WETH_PRICE,
-            accountBalances: accountsBalances_(accounts, zeroBalances)
+            accountBalances: accountsBalances_(accounts, balances)
         });
         assetPositionsList[3] = Accounts.AssetPositions({
             asset: link_(chainId),
             symbol: "LINK",
             decimals: 18,
             usdPrice: LINK_PRICE,
-            accountBalances: accountsBalances_(accounts, zeroBalances)
+            accountBalances: accountsBalances_(accounts, balances)
         });
 
         return assetPositionsList;
@@ -240,14 +238,14 @@ contract QuarkBuilderTest {
             symbol: "WETH",
             decimals: 18,
             usdPrice: WETH_PRICE,
-            accountBalances: accountBalances_(account, 0)
+            accountBalances: accountBalances_(account, balance)
         });
         assetPositionsList[3] = Accounts.AssetPositions({
             asset: link_(chainId),
             symbol: "LINK",
             decimals: 18,
             usdPrice: LINK_PRICE,
-            accountBalances: accountBalances_(account, 0) // empty balance
+            accountBalances: accountBalances_(account, balance)
         });
         return assetPositionsList;
     }

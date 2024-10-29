@@ -2,13 +2,13 @@
 pragma solidity ^0.8.27;
 
 import {Accounts} from "src/builder/Accounts.sol";
-import {BridgeRoutes, CCTP} from "src/builder/BridgeRoutes.sol";
+import {Across, BridgeRoutes, CCTP} from "src/builder/BridgeRoutes.sol";
 import {CodeJarHelper} from "src/builder/CodeJarHelper.sol";
 import {Math} from "src/lib/Math.sol";
 import {PriceFeeds} from "src/builder/PriceFeeds.sol";
 import {Strings} from "src/builder/Strings.sol";
 import {UniswapRouter} from "src/builder/UniswapRouter.sol";
-
+import {console} from "forge-std/console.sol";
 import {
     ApproveAndSwap,
     CometRepayAndWithdrawMultipleAssets,
@@ -23,6 +23,7 @@ import {RecurringSwap} from "src/RecurringSwap.sol";
 import {WrapperActions} from "src/WrapperScripts.sol";
 import {IQuarkWallet} from "quark-core/src/interfaces/IQuarkWallet.sol";
 import {IMorpho, Position} from "src/interfaces/IMorpho.sol";
+import {IFFI} from "src/interfaces/IFFI.sol";
 import {PaymentInfo} from "src/builder/PaymentInfo.sol";
 import {TokenWrapper} from "src/builder/TokenWrapper.sol";
 import {MorphoInfo} from "src/builder/MorphoInfo.sol";
@@ -52,6 +53,7 @@ library Actions {
     string constant ACTION_TYPE_WRAP = "WRAP";
     string constant ACTION_TYPE_UNWRAP = "UNWRAP";
 
+    string constant BRIDGE_TYPE_ACROSS = "ACROSS";
     string constant BRIDGE_TYPE_CCTP = "CCTP";
 
     /* expiry buffers */
@@ -67,6 +69,9 @@ library Actions {
     uint256 constant AVERAGE_BLOCK_TIME = 12 seconds;
     uint256 constant RECURRING_SWAP_MAX_SLIPPAGE = 1e17; // 1%
     uint256 constant RECURRING_SWAP_WINDOW_LENGTH = 1 days;
+
+    /* FFI Addresses (starts from 0xFF1000, FFI with 100 reserved addresses) */
+    address constant ACROSS_FFI_ADDRESS = address(0xFF1000);
 
     /* ===== Custom Errors ===== */
 
@@ -293,11 +298,12 @@ library Actions {
     }
 
     struct BridgeActionContext {
-        uint256 amount;
         string assetSymbol;
         string bridgeType;
         uint256 chainId;
         uint256 destinationChainId;
+        uint256 inputAmount;
+        uint256 outputAmount;
         uint256 price;
         address recipient;
         address token;
@@ -465,7 +471,7 @@ library Actions {
         BridgeOperationInfo memory bridgeInfo,
         Accounts.ChainAccounts[] memory chainAccountsList,
         PaymentInfo.Payment memory payment
-    ) internal pure returns (IQuarkWallet.QuarkOperation[] memory, Action[] memory) {
+    ) internal view returns (IQuarkWallet.QuarkOperation[] memory, Action[] memory) {
         /*
          * at most one bridge operation per non-destination chain,
          * and at most one transferIntent operation on the destination chain.
@@ -480,6 +486,7 @@ library Actions {
             Accounts.getBalanceOnChain(bridgeInfo.assetSymbol, bridgeInfo.dstChainId, chainAccountsList);
         uint256 amountLeftToBridge = bridgeInfo.amountNeededOnDst - balanceOnDstChain;
 
+        // TODO: NEED SOME LOGIC TO HANDLE WETH/ETH IN ACROSS. ALSO TO BRIDGE THE COUNTERPART TOKEN AS WELL
         // Check to see if there are counterpart tokens on the destination chain that can be used. If there are, subtract the balance from `amountLeftToBridge`
         if (TokenWrapper.hasWrapperContract(bridgeInfo.dstChainId, bridgeInfo.assetSymbol)) {
             string memory counterpartSymbol =
@@ -603,11 +610,19 @@ library Actions {
 
     function bridgeAsset(BridgeAsset memory bridge, PaymentInfo.Payment memory payment, bool useQuotecall)
         internal
-        pure
+        view
         returns (IQuarkWallet.QuarkOperation memory, Action memory)
     {
+        // TODO: bridge using Across for USDC as well
         if (Strings.stringEqIgnoreCase(bridge.assetSymbol, "USDC")) {
             return bridgeUSDC(bridge, payment, useQuotecall);
+        }
+        // TODO: do WETH only for now
+        else if (
+            Strings.stringEqIgnoreCase(bridge.assetSymbol, "WETH")
+                || Strings.stringEqIgnoreCase(bridge.assetSymbol, "ETH")
+        ) {
+            return bridgeAcross(bridge, payment, useQuotecall);
         } else {
             revert BridgingUnsupportedForAsset();
         }
@@ -648,14 +663,112 @@ library Actions {
 
         // Construct Action
         BridgeActionContext memory bridgeActionContext = BridgeActionContext({
-            amount: bridge.amount,
             price: srcUSDCPositions.usdPrice,
             token: srcUSDCPositions.asset,
             assetSymbol: srcUSDCPositions.symbol,
+            inputAmount: bridge.amount,
+            outputAmount: bridge.amount,
             chainId: bridge.srcChainId,
             recipient: bridge.recipient,
             destinationChainId: bridge.destinationChainId,
             bridgeType: BRIDGE_TYPE_CCTP
+        });
+
+        Action memory action = Actions.Action({
+            chainId: bridge.srcChainId,
+            quarkAccount: bridge.sender,
+            actionType: ACTION_TYPE_BRIDGE,
+            actionContext: abi.encode(bridgeActionContext),
+            paymentMethod: PaymentInfo.paymentMethodForPayment(payment, useQuotecall),
+            paymentToken: payment.isToken
+                ? PaymentInfo.knownToken(payment.currency, bridge.srcChainId).token
+                : PaymentInfo.NON_TOKEN_PAYMENT,
+            paymentTokenSymbol: payment.currency,
+            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, bridge.srcChainId) : 0,
+            nonceSecret: accountSecret.nonceSecret,
+            totalPlays: 1
+        });
+
+        return (quarkOperation, action);
+    }
+
+    function bridgeAcross(BridgeAsset memory bridge, PaymentInfo.Payment memory payment, bool useQuotecall)
+        internal
+        view
+        returns (IQuarkWallet.QuarkOperation memory, Action memory)
+    {
+        Accounts.ChainAccounts memory srcChainAccounts =
+            Accounts.findChainAccounts(bridge.srcChainId, bridge.chainAccountsList);
+
+        Accounts.ChainAccounts memory dstChainAccounts =
+            Accounts.findChainAccounts(bridge.destinationChainId, bridge.chainAccountsList);
+
+        Accounts.AssetPositions memory srcAssetPositions =
+            Accounts.findAssetPositions(bridge.assetSymbol, srcChainAccounts.assetPositionsList);
+
+        Accounts.AssetPositions memory dstAssetPositions =
+            Accounts.findAssetPositions(bridge.assetSymbol, dstChainAccounts.assetPositionsList);
+
+        Accounts.QuarkSecret memory accountSecret =
+            Accounts.findQuarkSecret(bridge.sender, srcChainAccounts.quarkSecrets);
+
+        bytes[] memory scriptSources = new bytes[](1);
+        scriptSources[0] = Across.bridgeScriptSource();
+
+        bytes memory ffiCalldata = abi.encodeCall(
+            IFFI.requestAcrossQuote,
+            (
+                bridge.srcChainId,
+                bridge.destinationChainId,
+                srcAssetPositions.asset,
+                dstAssetPositions.asset,
+                bridge.amount
+            )
+        );
+        // Perform staticcall
+        (bool success, bytes memory result) = ACROSS_FFI_ADDRESS.staticcall(ffiCalldata);
+        console.logBytes(result);
+        require(success, "FFI failed");
+        // Decode the result
+        uint256 totalRelayFeePct = abi.decode(result, (uint256));
+
+        // TODO: maybe add some buffer to this
+        uint256 inputAmount = bridge.amount * 1e18 / (1e18 - totalRelayFeePct);
+        console.logUint(bridge.amount);
+        console.logUint(inputAmount);
+
+        // Construct QuarkOperation
+        IQuarkWallet.QuarkOperation memory quarkOperation = IQuarkWallet.QuarkOperation({
+            nonce: accountSecret.nonceSecret,
+            isReplayable: false,
+            scriptAddress: CodeJarHelper.getCodeAddress(scriptSources[0]),
+            // TODO: INPUT AMOUNT NEEDS TO BE DETERMINED VIA FFI (bridge.amount)
+            scriptCalldata: Across.encodeBridgeAction(
+                bridge.srcChainId,
+                bridge.destinationChainId,
+                srcAssetPositions.asset,
+                dstAssetPositions.asset,
+                inputAmount,
+                bridge.amount,
+                bridge.recipient,
+                bridge.blockTimestamp,
+                false // useNativeToken
+            ),
+            scriptSources: scriptSources,
+            expiry: bridge.blockTimestamp + BRIDGE_EXPIRY_BUFFER
+        });
+
+        // Construct Action
+        BridgeActionContext memory bridgeActionContext = BridgeActionContext({
+            price: srcAssetPositions.usdPrice,
+            token: srcAssetPositions.asset,
+            assetSymbol: srcAssetPositions.symbol,
+            chainId: bridge.srcChainId,
+            inputAmount: inputAmount,
+            outputAmount: bridge.amount,
+            recipient: bridge.recipient,
+            destinationChainId: bridge.destinationChainId,
+            bridgeType: BRIDGE_TYPE_ACROSS
         });
 
         Action memory action = Actions.Action({

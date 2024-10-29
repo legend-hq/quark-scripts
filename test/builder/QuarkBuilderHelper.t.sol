@@ -18,11 +18,13 @@ contract QuarkBuilderHelperTest is Test {
         assertEq(helper.canBridge(999, 8453, "USDC"), false);
     }
 
-    function testCannotBridgeUnsupportedAssets() public {
-        QuarkBuilderHelper helper = new QuarkBuilderHelper();
+    // TODO: Eeverything is technically bridgeable with Across unless we hardcode a list
+    // of supported bridgeable addresses
+    // function testCannotBridgeUnsupportedAssets() public {
+    //     QuarkBuilderHelper helper = new QuarkBuilderHelper();
 
-        assertEq(helper.canBridge(1, 8453, "not_supported"), false);
-    }
+    //     assertEq(helper.canBridge(1, 8453, "not_supported"), false);
+    // }
 
     function testAddBufferToPaymentCost() public {
         QuarkBuilderHelper helper = new QuarkBuilderHelper();
