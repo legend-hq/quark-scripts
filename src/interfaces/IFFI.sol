@@ -4,10 +4,10 @@ pragma solidity 0.8.27;
 /// @dev Interface for foreign function interface (FFI) contracts
 interface IFFI {
     function requestAcrossQuote(
-        uint256 srcChain,
-        uint256 dstChain,
         address inputToken,
         address outputToken,
+        uint256 srcChain,
+        uint256 dstChain,
         uint256 amount
     ) external pure returns (uint256 totalRelayFeePct);
 }

@@ -718,10 +718,10 @@ library Actions {
         bytes memory ffiCalldata = abi.encodeCall(
             IFFI.requestAcrossQuote,
             (
-                bridge.srcChainId,
-                bridge.destinationChainId,
                 srcAssetPositions.asset,
                 dstAssetPositions.asset,
+                bridge.srcChainId,
+                bridge.destinationChainId,
                 bridge.amount
             )
         );
