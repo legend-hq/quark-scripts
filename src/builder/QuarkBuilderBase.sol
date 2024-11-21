@@ -434,8 +434,8 @@ contract QuarkBuilderBase {
                 Actions.WrapOrUnwrapAsset({
                     chainAccountsList: chainAccountsList,
                     assetSymbol: counterpartSymbol,
-                    // This is just to indicate we plan to wrap all
-                    amount: type(uint256).max,
+                    // Note: The wrapper logic should only "wrap all" or "wrap up to" the amount needed
+                    amount: amountNeeded,
                     chainId: chainId,
                     sender: account,
                     blockTimestamp: blockTimestamp
