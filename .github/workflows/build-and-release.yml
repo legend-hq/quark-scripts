@@ -2,6 +2,7 @@ name: Build and Release
 
 on:
   workflow_dispatch:
+  push:
 
 permissions:
   contents: write  # Allows the workflow to create releases
