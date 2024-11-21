@@ -1,0 +1,68 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write  # Allows the workflow to create releases
+
+jobs:
+  build-and-release:
+    # Ensures the job runs only on the specified branch
+    if: ${{ github.ref == 'refs/heads/hayesgm/release' }}  # Replace with 'refs/heads/main' when ready
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Install dependencies
+        run: forge install
+
+      - name: Build Artifacts
+        run: FOUNDRY_PROFILE=ir forge build
+
+      - name: Extract Version Tag
+        id: get_version
+        run: |
+          VERSION=$(FOUNDRY_PROFILE=ir forge script script/Info.s.sol:Version --silent --json | jq -r '.logs[0]')
+          echo "Extracted version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if Tag Exists
+        run: |
+          git fetch --tags
+          if git rev-parse "refs/tags/${{ steps.get_version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Error: Tag ${{ steps.get_version.outputs.version }} already exists."
+            exit 1
+          fi
+
+      - name: Create Git Tag
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag ${{ steps.get_version.outputs.version }}
+          git push origin ${{ steps.get_version.outputs.version }}
+
+      - name: Archive Artifacts
+        run: |
+          zip -r artifacts.zip out
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.get_version.outputs.version }}
+          name: Release ${{ steps.get_version.outputs.version }}
+          generateReleaseNotes: true
+          artifacts: artifacts.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
