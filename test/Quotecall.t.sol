@@ -14,7 +14,6 @@ import {QuarkWalletProxyFactory} from "quark-proxy/src/QuarkWalletProxyFactory.s
 
 import {Ethcall} from "quark-core-scripts/src/Ethcall.sol";
 import {Multicall} from "quark-core-scripts/src/Multicall.sol";
-import {Quotecall} from "quark-core-scripts/src/Quotecall.sol";
 
 import {Counter} from "test/lib/Counter.sol";
 import {Reverts} from "test/lib/Reverts.sol";
@@ -25,6 +24,7 @@ import {QuarkOperationHelper, ScriptType} from "test/lib/QuarkOperationHelper.so
 import "quark-core-scripts/src/vendor/chainlink/AggregatorV3Interface.sol";
 
 import {IComet, IERC20} from "src/DeFiScripts.sol";
+import {Quotecall} from "src/Quotecall.sol";
 
 contract QuotecallTest is Test {
     event PayForGas(address indexed payer, address indexed payee, address indexed paymentToken, uint256 amount);
@@ -43,19 +43,9 @@ contract QuotecallTest is Test {
     address constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
     address constant WBTC = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599;
 
-    // Mainnet ETH / USD pricefeed
-    address constant ETH_USD_PRICE_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
-    address constant ETH_BTC_PRICE_FEED = 0xAc559F25B1619171CbC396a50854A3240b6A4e99;
-
     bytes multicall = new YulHelper().getCode("Multicall.sol/Multicall.json");
     bytes ethcall = new YulHelper().getCode("Ethcall.sol/Ethcall.json");
     bytes reverts = new YulHelper().getCode("Reverts.sol/Reverts.json");
-
-    // Quotecall has its contructor with 4 parameters
-    uint256 constant MAX_DELTA_PERCENTAGE = 0.2e18; // 20%
-    bytes quotecall;
-    bytes quotecallUSDT;
-    bytes quotecallWBTC;
 
     bytes cometSupplyScript = new YulHelper().getCode("DeFiScripts.sol/CometSupplyActions.json");
 
@@ -66,9 +56,8 @@ contract QuotecallTest is Test {
     address ethcallAddress;
     address multicallAddress;
     address revertsAddress;
+    bytes quotecall;
     address quotecallAddress;
-    address quotecallUSDTAddress;
-    address quotecallWBTCAddress;
     address cometSupplyScriptAddress;
     address cometWithdrawScriptAddress;
     address uniswapSwapScriptAddress;
@@ -87,16 +76,8 @@ contract QuotecallTest is Test {
         multicallAddress = codeJar.saveCode(multicall);
         revertsAddress = codeJar.saveCode(reverts);
 
-        quotecall =
-            abi.encodePacked(type(Quotecall).creationCode, abi.encode(ETH_USD_PRICE_FEED, USDC, MAX_DELTA_PERCENTAGE));
-        quotecallUSDT =
-            abi.encodePacked(type(Quotecall).creationCode, abi.encode(ETH_USD_PRICE_FEED, USDT, MAX_DELTA_PERCENTAGE));
-        quotecallWBTC =
-            abi.encodePacked(type(Quotecall).creationCode, abi.encode(ETH_BTC_PRICE_FEED, WBTC, MAX_DELTA_PERCENTAGE));
-
+        quotecall = abi.encodePacked(type(Quotecall).creationCode);
         quotecallAddress = codeJar.saveCode(quotecall);
-        quotecallUSDTAddress = codeJar.saveCode(quotecallUSDT);
-        quotecallWBTCAddress = codeJar.saveCode(quotecallWBTC);
 
         cometSupplyScriptAddress = codeJar.saveCode(cometSupplyScript);
         cometWithdrawScriptAddress = codeJar.saveCode(cometWithdrawScript);
@@ -106,13 +87,7 @@ contract QuotecallTest is Test {
     /* ===== call context-based tests ===== */
 
     function testInitializeProperlyFromConstructor() public {
-        address storedPriceFeedAddress = Quotecall(quotecallAddress).nativeTokenBasedPriceFeedAddress();
-        address storedPaymentTokenAddress = Quotecall(quotecallAddress).paymentTokenAddress();
-        uint256 storedMaxDeltaPercentage = Quotecall(quotecallAddress).maxDeltaPercentage();
-
-        assertEq(storedPriceFeedAddress, ETH_USD_PRICE_FEED);
-        assertEq(storedPaymentTokenAddress, USDC);
-        assertEq(storedMaxDeltaPercentage, MAX_DELTA_PERCENTAGE);
+        // There are no public variables to check
     }
 
     function testRevertsForInvalidCallContext() public {
@@ -127,16 +102,41 @@ contract QuotecallTest is Test {
                 abi.encodeCall(Counter.setNumber, (1)),
                 0 // value
             ),
+            USDC,
             10e6
         );
     }
 
     /* ===== general tests ===== */
 
+    function testPayWithUSDCAndNoDelegatecall() public {
+        // gas: do not meter set-up
+        vm.pauseGasMetering();
+        QuarkWallet wallet = QuarkWallet(factory.create(alice, address(0)));
+        // Give wallet some USDC for payment
+        deal(USDC, address(wallet), 1000e6);
+
+        // Execute through quotecall
+        QuarkWallet.QuarkOperation memory op = new QuarkOperationHelper().newBasicOpWithCalldata(
+            wallet,
+            quotecall,
+            abi.encodeWithSelector(Quotecall.run.selector, address(0), "", USDC, 10e6),
+            ScriptType.ScriptSource
+        );
+        bytes memory signature = new SignatureHelper().signOp(alicePrivateKey, wallet, op);
+
+        // gas: meter execute
+        vm.resumeGasMetering();
+        vm.expectEmit(true, true, true, true);
+        emit PayForGas(address(wallet), tx.origin, USDC, 10e6);
+        wallet.executeQuarkOperation(op, signature);
+
+        assertEq(IERC20(USDC).balanceOf(address(wallet)), 990e6);
+    }
+
     function testSimpleCounterAndPayWithUSDC() public {
         // gas: do not meter set-up
         vm.pauseGasMetering();
-        vm.txGasPrice(32 gwei);
         QuarkWallet wallet = QuarkWallet(factory.create(alice, address(0)));
         // Give wallet some USDC for payment
         deal(USDC, address(wallet), 1000e6);
@@ -168,6 +168,7 @@ contract QuotecallTest is Test {
                 Quotecall.run.selector,
                 multicallAddress,
                 abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
+                USDC,
                 10e6
             ),
             ScriptType.ScriptSource
@@ -187,7 +188,6 @@ contract QuotecallTest is Test {
     function testSimpleTransferTokenAndPayWithUSDC() public {
         // gas: do not meter set-up
         vm.pauseGasMetering();
-        vm.txGasPrice(32 gwei);
         QuarkWallet wallet = QuarkWallet(factory.create(alice, address(0)));
         // Give wallet some USDC for payment
         deal(USDC, address(wallet), 1000e6);
@@ -205,6 +205,7 @@ contract QuotecallTest is Test {
                     abi.encodeWithSignature("transfer(address,uint256)", address(this), 10e6),
                     0
                 ),
+                USDC,
                 10e6
             ),
             ScriptType.ScriptSource
@@ -224,7 +225,6 @@ contract QuotecallTest is Test {
     function testReturnCallResult() public {
         // gas: do not meter set-up
         vm.pauseGasMetering();
-        vm.txGasPrice(32 gwei);
         QuarkWallet wallet = QuarkWallet(factory.create(alice, address(0)));
 
         counter.setNumber(5);
@@ -239,6 +239,7 @@ contract QuotecallTest is Test {
                 abi.encodeWithSelector(
                     Ethcall.run.selector, address(counter), abi.encodeWithSignature("decrement(uint256)", (1)), 0
                 ),
+                USDC,
                 8e6
             ),
             ScriptType.ScriptSource
@@ -258,7 +259,6 @@ contract QuotecallTest is Test {
 
     function testQuotecallForPayWithUSDT() public {
         vm.pauseGasMetering();
-        vm.txGasPrice(32 gwei);
         QuarkWallet wallet = QuarkWallet(factory.create(alice, address(0)));
 
         // Deal some USDT and WETH
@@ -268,7 +268,7 @@ contract QuotecallTest is Test {
         // Pay with USDT
         QuarkWallet.QuarkOperation memory op = new QuarkOperationHelper().newBasicOpWithCalldata(
             wallet,
-            quotecallUSDT,
+            quotecall,
             abi.encodeWithSelector(
                 Quotecall.run.selector,
                 ethcallAddress,
@@ -278,6 +278,7 @@ contract QuotecallTest is Test {
                     abi.encodeWithSignature("transfer(address,uint256)", address(this), 1 ether),
                     0
                 ),
+                USDT,
                 10e6
             ),
             ScriptType.ScriptSource
@@ -296,7 +297,6 @@ contract QuotecallTest is Test {
 
     function testQuotecallForPayWithWBTC() public {
         vm.pauseGasMetering();
-        vm.txGasPrice(32 gwei);
         QuarkWallet wallet = QuarkWallet(factory.create(alice, address(0)));
 
         // Deal some WBTC and WETH
@@ -306,7 +306,7 @@ contract QuotecallTest is Test {
         // Pay with WBTC
         QuarkWallet.QuarkOperation memory op = new QuarkOperationHelper().newBasicOpWithCalldata(
             wallet,
-            quotecallWBTC,
+            quotecall,
             abi.encodeWithSelector(
                 Quotecall.run.selector,
                 ethcallAddress,
@@ -316,6 +316,7 @@ contract QuotecallTest is Test {
                     abi.encodeWithSignature("transfer(address,uint256)", address(this), 1 ether),
                     0
                 ),
+                WBTC,
                 30e3
             ),
             ScriptType.ScriptSource
@@ -331,80 +332,9 @@ contract QuotecallTest is Test {
         assertEq(IERC20(WBTC).balanceOf(address(wallet)), 99_970_000);
     }
 
-    function testRevertsWhenQuoteTooLow() public {
-        vm.pauseGasMetering();
-        vm.txGasPrice(32 gwei);
-        QuarkWallet wallet = QuarkWallet(factory.create(alice, address(0)));
-
-        // Deal some USDC and WETH
-        deal(USDC, address(wallet), 1000e6);
-        deal(WETH, address(wallet), 1 ether);
-
-        // Pay with USDC
-        QuarkWallet.QuarkOperation memory op = new QuarkOperationHelper().newBasicOpWithCalldata(
-            wallet,
-            quotecall,
-            abi.encodeWithSelector(
-                Quotecall.run.selector,
-                ethcallAddress,
-                abi.encodeWithSelector(
-                    Ethcall.run.selector,
-                    WETH,
-                    abi.encodeWithSignature("transfer(address,uint256)", address(this), 1 ether),
-                    0
-                ),
-                2e6
-            ),
-            ScriptType.ScriptSource
-        );
-        bytes memory signature = new SignatureHelper().signOp(alicePrivateKey, wallet, op);
-
-        vm.resumeGasMetering();
-        vm.expectRevert(abi.encodeWithSelector(Quotecall.QuoteToleranceExceeded.selector));
-        wallet.executeQuarkOperation(op, signature);
-
-        assertEq(IERC20(USDC).balanceOf(address(wallet)), 1000e6);
-    }
-
-    function testRevertsWhenQuoteTooHigh() public {
-        vm.pauseGasMetering();
-        vm.txGasPrice(32 gwei);
-        QuarkWallet wallet = QuarkWallet(factory.create(alice, address(0)));
-
-        // Deal some USDC and WETH
-        deal(USDC, address(wallet), 1000e6);
-        deal(WETH, address(wallet), 1 ether);
-
-        // Pay with USDC
-        QuarkWallet.QuarkOperation memory op = new QuarkOperationHelper().newBasicOpWithCalldata(
-            wallet,
-            quotecall,
-            abi.encodeWithSelector(
-                Quotecall.run.selector,
-                ethcallAddress,
-                abi.encodeWithSelector(
-                    Ethcall.run.selector,
-                    WETH,
-                    abi.encodeWithSignature("transfer(address,uint256)", address(this), 1 ether),
-                    0
-                ),
-                20e6
-            ),
-            ScriptType.ScriptSource
-        );
-        bytes memory signature = new SignatureHelper().signOp(alicePrivateKey, wallet, op);
-
-        vm.resumeGasMetering();
-        vm.expectRevert(abi.encodeWithSelector(Quotecall.QuoteToleranceExceeded.selector));
-        wallet.executeQuarkOperation(op, signature);
-
-        assertEq(IERC20(USDC).balanceOf(address(wallet)), 1000e6);
-    }
-
     function testQuotecallRevertsWhenCallReverts() public {
         // gas: do not meter set-up
         vm.pauseGasMetering();
-        vm.txGasPrice(32 gwei);
         QuarkWallet wallet = QuarkWallet(factory.create(alice, address(0)));
         // Give wallet some USDC for payment
         deal(USDC, address(wallet), 1000e6);
@@ -413,7 +343,7 @@ contract QuotecallTest is Test {
         QuarkWallet.QuarkOperation memory op = new QuarkOperationHelper().newBasicOpWithCalldata(
             wallet,
             quotecall,
-            abi.encodeWithSelector(Quotecall.run.selector, revertsAddress, "", 8e6),
+            abi.encodeWithSelector(Quotecall.run.selector, revertsAddress, "", USDC, 8e6),
             ScriptType.ScriptSource
         );
         bytes memory signature = new SignatureHelper().signOp(alicePrivateKey, wallet, op);
