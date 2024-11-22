@@ -35,6 +35,8 @@ jobs:
       - name: Install dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
         run: forge install
+        env:
+          FOUNDRY_PROFILE: ir
 
       - name: Restore Forge Build Cache
         id: cache-forge-build
@@ -54,11 +56,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-foundry-out-
 
-      - name: Install dependencies
-        run: forge install
-
       - name: Build Artifacts
-        run: FOUNDRY_PROFILE=ir forge build
+        run: forge build
+        env:
+          FOUNDRY_PROFILE: ir
 
       - name: Extract Version Tag
         id: get_version
