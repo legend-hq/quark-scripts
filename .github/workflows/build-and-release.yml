@@ -1,0 +1,104 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write  # Allows the workflow to create tags and releases
+
+jobs:
+  build-and-release:
+    # Ensures the job runs only on main
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Cache Dependencies
+        id: cache-deps
+        uses: actions/cache@v3
+        with:
+          path: lib
+          key: ${{ runner.os }}-foundry-lib-${{ hashFiles('foundry.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-foundry-lib-
+
+      - name: Install dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: forge install
+
+      - name: Restore Forge Build Cache
+        id: cache-forge-build
+        uses: actions/cache@v3
+        with:
+          path: cache
+          key: ${{ runner.os }}-foundry-cache-${{ hashFiles('foundry.toml', 'src/**/*.sol') }}
+          restore-keys: |
+            ${{ runner.os }}-foundry-cache-
+
+      - name: Cache Build Artifacts
+        id: cache-build
+        uses: actions/cache@v3
+        with:
+          path: out
+          key: ${{ runner.os }}-foundry-out-${{ hashFiles('foundry.toml', 'src/**/*.sol') }}
+          restore-keys: |
+            ${{ runner.os }}-foundry-out-
+
+      - name: Install dependencies
+        run: forge install
+
+      - name: Build Artifacts
+        run: FOUNDRY_PROFILE=ir forge build
+
+      - name: Extract Version Tag
+        id: get_version
+        run: |
+          set -e  # Exit on error
+          VERSION=$(FOUNDRY_PROFILE=ir forge script script/Info.s.sol:Version --json | grep "logs" | jq -r '.logs[0]')
+          if [ -z "$VERSION" ]; then
+            echo "Error: Version tag could not be extracted."
+            exit 1
+          fi
+          echo "Extracted version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if Tag Exists
+        run: |
+          git fetch origin --tags --no-recurse-submodules
+          if git rev-parse "refs/tags/${{ steps.get_version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Error: Tag ${{ steps.get_version.outputs.version }} already exists."
+            exit 1
+          fi
+
+      - name: Create Git Tag
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag ${{ steps.get_version.outputs.version }}
+          git push origin ${{ steps.get_version.outputs.version }}
+
+      - name: Archive Artifacts
+        run: |
+          zip -r artifacts.zip out
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.get_version.outputs.version }}
+          name: Release ${{ steps.get_version.outputs.version }}
+          generateReleaseNotes: true
+          artifacts: artifacts.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

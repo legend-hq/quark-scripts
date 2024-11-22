@@ -5,7 +5,7 @@ import {IQuarkWallet} from "quark-core/src/interfaces/IQuarkWallet.sol";
 
 import {Actions} from "src/builder/actions/Actions.sol";
 import {Accounts} from "src/builder/Accounts.sol";
-import {BridgeRoutes} from "src/builder/BridgeRoutes.sol";
+import {Across, BridgeRoutes} from "src/builder/BridgeRoutes.sol";
 import {EIP712Helper} from "src/builder/EIP712Helper.sol";
 import {Math} from "src/lib/Math.sol";
 import {MorphoInfo} from "src/builder/MorphoInfo.sol";
@@ -17,6 +17,8 @@ import {TokenWrapper} from "src/builder/TokenWrapper.sol";
 import {QuarkOperationHelper} from "src/builder/QuarkOperationHelper.sol";
 import {List} from "src/builder/List.sol";
 import {HashMap} from "src/builder/HashMap.sol";
+
+string constant QUARK_BUILDER_VERSION = "0.3.1";
 
 contract QuarkBuilderBase {
     /* ===== Output Types ===== */
@@ -37,7 +39,7 @@ contract QuarkBuilderBase {
 
     /* ===== Constants ===== */
 
-    string constant VERSION = "0.3.1";
+    string constant VERSION = QUARK_BUILDER_VERSION;
 
     /* ===== Custom Errors ===== */
 
@@ -232,13 +234,20 @@ contract QuarkBuilderBase {
                 uint256 supplementalBalance = HashMap.contains(assetsBridged, abi.encode(assetSymbolOut))
                     ? HashMap.getUint256(assetsBridged, abi.encode(assetSymbolOut))
                     : 0;
+                // Note: Right now, ETH/WETH is only bridged via Across. Across has a weird quirk where it will send ETH to EOAs and
+                // WETH to contracts. Since the QuarkBuilder cannot know if a QuarkWallet is deployed before the operation is actually
+                // executed on-chain, we need to assume there is no supplemental balance that arrives on the destination chain.
+                if (Across.isNonDeterministicBridgeAction(assetsBridged, assetSymbolOut)) {
+                    supplementalBalance = 0;
+                }
+
                 checkAndInsertWrapOrUnwrapAction({
                     actions: actions,
                     quarkOperations: quarkOperations,
                     chainAccountsList: chainAccountsList,
                     payment: payment,
                     assetSymbol: assetSymbolOut,
-                    amount: actionIntent.amountOuts[i],
+                    amountNeeded: actionIntent.amountOuts[i],
                     supplementalBalance: supplementalBalance,
                     chainId: actionIntent.chainId,
                     account: actionIntent.actor,
@@ -405,7 +414,7 @@ contract QuarkBuilderBase {
         Accounts.ChainAccounts[] memory chainAccountsList,
         PaymentInfo.Payment memory payment,
         string memory assetSymbol,
-        uint256 amount,
+        uint256 amountNeeded,
         uint256 supplementalBalance,
         uint256 chainId,
         address account,
@@ -415,8 +424,8 @@ contract QuarkBuilderBase {
         // Check if inserting wrapOrUnwrap action is necessary
         uint256 assetBalanceOnChain =
             Accounts.getBalanceOnChain(assetSymbol, chainId, chainAccountsList) + supplementalBalance;
-        if (assetBalanceOnChain < amount && TokenWrapper.hasWrapperContract(chainId, assetSymbol)) {
-            // If the asset has a wrapper counterpart, wrap/unwrap the token to cover the transferIntent amount
+        if (assetBalanceOnChain < amountNeeded && TokenWrapper.hasWrapperContract(chainId, assetSymbol)) {
+            // If the asset has a wrapper counterpart, wrap/unwrap the token to cover the amount needed for the intent
             string memory counterpartSymbol = TokenWrapper.getWrapperCounterpartSymbol(chainId, assetSymbol);
 
             // Wrap/unwrap the token to cover the amount
@@ -425,8 +434,8 @@ contract QuarkBuilderBase {
                 Actions.WrapOrUnwrapAsset({
                     chainAccountsList: chainAccountsList,
                     assetSymbol: counterpartSymbol,
-                    // NOTE: Wrap/unwrap the amount needed to cover the amount
-                    amount: amount - assetBalanceOnChain,
+                    // Note: The wrapper logic should only "wrap all" or "wrap up to" the amount needed
+                    amount: amountNeeded,
                     chainId: chainId,
                     sender: account,
                     blockTimestamp: blockTimestamp
