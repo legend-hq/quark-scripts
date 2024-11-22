@@ -34,6 +34,8 @@ jobs:
       - name: Install dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
         run: forge install
+        env:
+          FOUNDRY_PROFILE: ir
 
       - name: Restore Forge Build Cache
         id: cache-forge-build
@@ -57,10 +59,11 @@ jobs:
         run: |
           set -euo pipefail
           # grep -E '^test'  -- skip over test results, just get diffs
-          FOUNDRY_PROFILE=ir forge snapshot --no-match-path test/builder/**/*.t.sol --diff \
+          forge snapshot --no-match-path test/builder/**/*.t.sol --diff \
             | grep -E '^test'   \
             | tee .gas-snapshot.new
         env:
+          FOUNDRY_PROFILE: ir
           MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
           BASE_MAINNET_RPC_URL: ${{ secrets.BASE_MAINNET_RPC_URL }}
           SEPOLIA_RPC_URL: ${{ secrets.SEPOLIA_RPC_URL }}
