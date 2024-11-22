@@ -22,10 +22,38 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: "nightly-de33b6af53005037b463318d2628b5cfcaf39916"
+          version: nightly
+
+      - name: Cache Dependencies
+        id: cache-deps
+        uses: actions/cache@v3
+        with:
+          path: lib
+          key: ${{ runner.os }}-foundry-lib-${{ hashFiles('foundry.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-foundry-lib-
 
       - name: Install dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
         run: forge install
+
+      - name: Restore Forge Build Cache
+        id: cache-forge-build
+        uses: actions/cache@v3
+        with:
+          path: cache
+          key: ${{ runner.os }}-foundry-cache-${{ hashFiles('foundry.toml', 'src/**/*.sol') }}
+          restore-keys: |
+            ${{ runner.os }}-foundry-cache-
+
+      - name: Cache Build Artifacts
+        id: cache-build
+        uses: actions/cache@v3
+        with:
+          path: out
+          key: ${{ runner.os }}-foundry-out-${{ hashFiles('foundry.toml', 'src/**/*.sol') }}
+          restore-keys: |
+            ${{ runner.os }}-foundry-out-
 
       - name: Run Forge build
         run: |

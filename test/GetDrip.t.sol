@@ -26,7 +26,10 @@ contract GetDripTest is Test {
 
     function setUp() public {
         // Fork setup
-        vm.createSelectFork("https://sepolia.infura.io/v3/531e3eb124194de5a88caec726d10bea");
+        vm.createSelectFork(
+            vm.envString("SEPOLIA_RPC_URL"),
+            7125666 // Nov-21-2024 11:26:00 PM +UTC
+        );
         factory = new QuarkWalletProxyFactory(address(new QuarkWallet(new CodeJar(), new QuarkNonceManager())));
     }
 
