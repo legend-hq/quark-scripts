@@ -36,6 +36,15 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
         run: forge install
 
+      - name: Restore Forge Build Cache
+        id: cache-forge-build
+        uses: actions/cache@v3
+        with:
+          path: cache
+          key: ${{ runner.os }}-foundry-cache-${{ hashFiles('foundry.toml', 'src/**/*.sol') }}
+          restore-keys: |
+            ${{ runner.os }}-foundry-cache-
+
       - name: Cache Build Artifacts
         id: cache-build
         uses: actions/cache@v3
