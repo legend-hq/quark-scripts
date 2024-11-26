@@ -18,7 +18,7 @@ import {QuarkOperationHelper} from "src/builder/QuarkOperationHelper.sol";
 import {List} from "src/builder/List.sol";
 import {HashMap} from "src/builder/HashMap.sol";
 
-string constant QUARK_BUILDER_VERSION = "0.3.1";
+string constant QUARK_BUILDER_VERSION = "0.3.2";
 
 contract QuarkBuilderBase {
     /* ===== Output Types ===== */
