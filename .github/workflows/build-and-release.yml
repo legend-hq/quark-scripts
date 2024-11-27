@@ -6,6 +6,9 @@ on:
 permissions:
   contents: write  # Allows the workflow to create tags and releases
 
+env:
+  FOUNDRY_PROFILE: ir
+
 jobs:
   build-and-release:
     # Ensures the job runs only on main
@@ -54,11 +57,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-foundry-out-
 
-      - name: Install dependencies
-        run: forge install
-
       - name: Build Artifacts
-        run: FOUNDRY_PROFILE=ir forge build
+        run: forge build --skip test --skip script
 
       - name: Extract Version Tag
         id: get_version

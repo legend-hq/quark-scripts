@@ -21,3 +21,5 @@ node_modules/
 
 # Quark releases
 /quark-out.release-v*.zip
+/releases
+archive.zip

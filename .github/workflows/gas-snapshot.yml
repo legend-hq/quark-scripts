@@ -57,7 +57,7 @@ jobs:
         run: |
           set -euo pipefail
           # grep -E '^test'  -- skip over test results, just get diffs
-          FOUNDRY_PROFILE=ir forge snapshot --no-match-path test/builder/**/*.t.sol --diff \
+          forge snapshot --no-match-path test/builder/**/*.t.sol --diff \
             | grep -E '^test'   \
             | tee .gas-snapshot.new
         env:
