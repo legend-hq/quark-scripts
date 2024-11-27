@@ -5,4 +5,5 @@ pragma solidity 0.8.27;
 library Errors {
     error BadData();
     error NoKnownBridge(string bridgeType, uint256 srcChainId);
+    error BridgeAmountTooLow();
 }

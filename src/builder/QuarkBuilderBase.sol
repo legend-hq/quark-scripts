@@ -7,6 +7,7 @@ import {Actions} from "src/builder/actions/Actions.sol";
 import {Accounts} from "src/builder/Accounts.sol";
 import {Across, BridgeRoutes} from "src/builder/BridgeRoutes.sol";
 import {EIP712Helper} from "src/builder/EIP712Helper.sol";
+import {Errors} from "src/builder/Errors.sol";
 import {Math} from "src/lib/Math.sol";
 import {MorphoInfo} from "src/builder/MorphoInfo.sol";
 import {Strings} from "src/builder/Strings.sol";
@@ -683,5 +684,14 @@ contract QuarkBuilderBase {
         }
 
         return amountNeededOnChain;
+    }
+
+    // Stub to ensure that unused errors make it in the ABI
+    function includeErrors() external pure returns (uint256) {
+        if (true) {
+            return 0;
+        } else {
+            revert Errors.BridgeAmountTooLow();
+        }
     }
 }
