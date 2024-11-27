@@ -6,6 +6,9 @@ on:
 permissions:
   contents: write  # Allows the workflow to create tags and releases
 
+env:
+  FOUNDRY_PROFILE: ir
+
 jobs:
   build-and-release:
     # Ensures the job runs only on main
@@ -35,8 +38,6 @@ jobs:
       - name: Install dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
         run: forge install
-        env:
-          FOUNDRY_PROFILE: ir
 
       - name: Restore Forge Build Cache
         id: cache-forge-build
@@ -58,8 +59,6 @@ jobs:
 
       - name: Build Artifacts
         run: forge build --skip test --skip script
-        env:
-          FOUNDRY_PROFILE: ir
 
       - name: Extract Version Tag
         id: get_version
