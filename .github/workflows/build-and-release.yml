@@ -57,7 +57,7 @@ jobs:
             ${{ runner.os }}-foundry-out-
 
       - name: Build Artifacts
-        run: forge build
+        run: forge build --skip test --skip script
         env:
           FOUNDRY_PROFILE: ir
 
