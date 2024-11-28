@@ -227,6 +227,19 @@ library MorphoInfo {
                 lltv: 0.86e18
             })
         );
+        // cbBTC collateral markets
+        addMarketParams(
+            knownMarkets,
+            MorphoMarketKey({chainId: 1, borrowAssetSymbol: "USDC", collateralAssetSymbol: "cbBTC"}),
+            MarketParams({
+                loanToken: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48,
+                collateralToken: 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf,
+                oracle: 0xA6D6950c9F177F1De7f7757FB33539e3Ec60182a,
+                irm: 0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC,
+                lltv: 0.86e18
+            })
+        );
+
         // === Base morpho markets ===
         // cbBTC collateral markets
         // Reference: https://linear.app/legend-labs/project/morpho-borrow-78f58156ed93/overview
@@ -300,6 +313,18 @@ library MorphoInfo {
                 lltv: 0.86e18
             })
         );
+        // cbBTC collateral markets
+        addMarketParams(
+            knownMarkets,
+            MorphoMarketKey({chainId: 8453, borrowAssetSymbol: "USDC", collateralAssetSymbol: "cbBTC"}),
+            MarketParams({
+                loanToken: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913,
+                collateralToken: 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf,
+                oracle: 0x663BECd10daE6C4A3Dcd89F1d76c1174199639B9,
+                irm: 0x46415998764C29aB2a25CbeA6254146D50D22687,
+                lltv: 0.86e18
+            })
+        );
         // ezETH collateral markets
         addMarketParams(
             knownMarkets,
@@ -322,7 +347,7 @@ library MorphoInfo {
                 collateralToken: 0x2D5ee574e710219a521449679A4A7f2B43f046ad,
                 oracle: 0xaF02D46ADA7bae6180Ac2034C897a44Ac11397b2,
                 irm: 0x8C5dDCD3F601c91D1BF51c8ec26066010ACAbA7c,
-                lltv: 945000000000000000
+                lltv: 0.945e18
             })
         );
 
