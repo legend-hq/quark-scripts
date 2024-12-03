@@ -260,19 +260,6 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testWithdrawNotEnoughFundsToBridge() public {
-        QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 1000e6}); // max cost is 1000 USDC
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.1e6});
-        vm.expectRevert(abi.encodeWithSelector(Actions.NotEnoughFundsToBridge.selector, "usdc", 9.98e8, 9.971e8));
-        builder.cometWithdraw(
-            cometWithdraw_(1, cometUsdc_(1), "USDC", 1e6),
-            chainAccountsList_(2e6), // holding 2 USDC in total across 1, 8453
-            paymentUsdc_(maxCosts)
-        );
-    }
-
     function testCometWithdrawWithBridge() public {
         QuarkBuilder builder = new QuarkBuilder();
 
@@ -548,8 +535,7 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
 
-        vm.expectRevert(abi.encodeWithSelector(Actions.NotEnoughFundsToBridge.selector, "usdc", 99e6, 99e6));
-
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
         builder.cometWithdraw(
             cometWithdraw_(1, cometUsdc_(1), "USDC", type(uint256).max),
             chainAccountsFromChainPortfolios(chainPortfolios),
@@ -558,13 +544,13 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
     }
 
     function testCometWithdrawCostTooHigh() public {
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
+        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](3);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e6});
         maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 5e6});
+        maxCosts[2] = PaymentInfo.PaymentMaxCost({chainId: 7777, amount: 5e6});
         QuarkBuilder builder = new QuarkBuilder();
 
-        vm.expectRevert(abi.encodeWithSelector(Actions.NotEnoughFundsToBridge.selector, "usdc", 4e6, 4e6));
-
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
         builder.cometWithdraw(
             cometWithdraw_(1, cometUsdc_(1), "USDC", 1e6),
             chainAccountsList_(0e6),

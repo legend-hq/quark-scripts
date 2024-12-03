@@ -21,6 +21,7 @@ import {
 } from "src/DeFiScripts.sol";
 import {Math} from "src/lib/Math.sol";
 import {MorphoActions, MorphoRewardsActions, MorphoVaultActions} from "src/MorphoScripts.sol";
+import {QuotePay} from "src/QuotePay.sol";
 import {RecurringSwap} from "src/RecurringSwap.sol";
 import {WrapperActions} from "src/WrapperScripts.sol";
 import {IQuarkWallet} from "quark-core/src/interfaces/IQuarkWallet.sol";
@@ -54,6 +55,7 @@ library Actions {
     string constant ACTION_TYPE_WITHDRAW_AND_BORROW = "WITHDRAW_AND_BORROW";
     string constant ACTION_TYPE_WRAP = "WRAP";
     string constant ACTION_TYPE_UNWRAP = "UNWRAP";
+    string constant ACTION_TYPE_QUOTE_PAY = "QUOTE_PAY";
 
     string constant BRIDGE_TYPE_ACROSS = "ACROSS";
     string constant BRIDGE_TYPE_CCTP = "CCTP";
@@ -115,7 +117,8 @@ library Actions {
     struct WrapOrUnwrapAsset {
         Accounts.ChainAccounts[] chainAccountsList;
         string assetSymbol;
-        uint256 amount;
+        uint256 amountNeeded;
+        uint256 balanceOnChain;
         uint256 chainId;
         address sender;
         uint256 blockTimestamp;
@@ -242,6 +245,15 @@ library Actions {
         bytes32[][] proofs;
     }
 
+    struct QuotePayInfo {
+        Accounts.ChainAccounts[] chainAccountsList;
+        string assetSymbol;
+        uint256 amount;
+        uint256 chainId;
+        address sender;
+        uint256 blockTimestamp;
+    }
+
     // Note: Mainly to avoid stack too deep errors
     struct BridgeOperationInfo {
         string assetSymbol;
@@ -276,6 +288,7 @@ library Actions {
         // Null address if the payment method was OFFCHAIN.
         address paymentToken;
         string paymentTokenSymbol;
+        // TODO: might need to change this/remove this since payment isn't being made on each chain
         uint256 paymentMaxCost;
         // The secret used to generate the hash chain for a replayable operation. For non-replayable
         // operations, the `nonce` will be the `nonceSecret` (the hash chain has a length of 1)
@@ -467,6 +480,16 @@ library Actions {
         address[] tokens;
     }
 
+    struct QuotePayActionContext {
+        uint256 amount;
+        string assetSymbol;
+        uint256 chainId;
+        uint256 price;
+        address payee;
+        bytes32 quoteId;
+        address token;
+    }
+
     function constructBridgeOperations(
         BridgeOperationInfo memory bridgeInfo,
         Accounts.ChainAccounts[] memory chainAccountsList,
@@ -493,36 +516,15 @@ library Actions {
                 TokenWrapper.getWrapperCounterpartSymbol(bridgeInfo.dstChainId, bridgeInfo.assetSymbol);
             uint256 counterpartBalanceOnDstChain =
                 Accounts.getBalanceOnChain(counterpartSymbol, bridgeInfo.dstChainId, chainAccountsList);
-            uint256 counterpartTokenAmountToUse;
-            // In case if the counterpart token is the payment token, we need to leave enough payment token on the source chain to cover the payment max cost
-            if (payment.isToken && Strings.stringEqIgnoreCase(payment.currency, counterpartSymbol)) {
-                if (
-                    counterpartBalanceOnDstChain
-                        >= amountLeftToBridge + PaymentInfo.findMaxCost(payment, bridgeInfo.dstChainId)
-                ) {
-                    counterpartTokenAmountToUse = amountLeftToBridge;
-                } else {
-                    // NOTE: This logic only works when the user has only a single account on each chain. If there are multiple,
-                    // then we need to re-adjust this.
-                    counterpartTokenAmountToUse =
-                        counterpartBalanceOnDstChain - PaymentInfo.findMaxCost(payment, bridgeInfo.dstChainId);
-                }
-            } else {
-                if (counterpartBalanceOnDstChain >= amountLeftToBridge) {
-                    counterpartTokenAmountToUse = amountLeftToBridge;
-                } else {
-                    counterpartTokenAmountToUse = counterpartBalanceOnDstChain;
-                }
-            }
+            uint256 counterpartTokenAmountToUse =
+                counterpartBalanceOnDstChain >= amountLeftToBridge ? amountLeftToBridge : counterpartBalanceOnDstChain;
 
-            // NOTE: Only adjusts amount LeftToBridge
-            // The real wrapping/unwrapping will be done outside of the construct bridge operation function
+            // NOTE: Only adjusts amountLeftToBridge, the real wrapping/unwrapping will be done outside of the construct bridge operation function
             // Update amountLeftToBridge
             amountLeftToBridge -= counterpartTokenAmountToUse;
         }
 
         uint256 bridgeActionCount = 0;
-        // TODO: bridge routing logic (which bridge to prioritize, how many bridges?)
         // Iterate chainAccountList and find chains that can provide enough funds to bridge.
         // One optimization is to allow the client to provide optimal routes.
         for (uint256 i = 0; i < chainAccountsList.length; ++i) {
@@ -548,29 +550,9 @@ library Actions {
             // TODO: Make logic smarter. Currently, this uses a greedy algorithm.
             // e.g. Optimize by trying to bridge with the least amount of bridge operations
             for (uint256 j = 0; j < srcAccountBalances.length; ++j) {
-                uint256 amountToBridge;
-                // If the intent token is the payment token, we need to leave enough payment token on the source chain to cover the payment max cost
-                if (payment.isToken && Strings.stringEqIgnoreCase(payment.currency, bridgeInfo.assetSymbol)) {
-                    if (
-                        srcAccountBalances[j].balance
-                            >= amountLeftToBridge + PaymentInfo.findMaxCost(payment, srcChainAccounts.chainId)
-                    ) {
-                        amountToBridge = amountLeftToBridge;
-                    } else {
-                        // NOTE: This logic only works when the user has only a single account on each chain. If there are multiple,
-                        // then we need to re-adjust this.
-                        amountToBridge = Math.subtractFlooredAtZero(
-                            srcAccountBalances[j].balance, PaymentInfo.findMaxCost(payment, srcChainAccounts.chainId)
-                        );
-                    }
-                } else {
-                    if (srcAccountBalances[j].balance >= amountLeftToBridge) {
-                        amountToBridge = amountLeftToBridge;
-                    } else {
-                        amountToBridge = srcAccountBalances[j].balance;
-                    }
-                }
-
+                uint256 amountToBridge = srcAccountBalances[j].balance >= amountLeftToBridge
+                    ? amountLeftToBridge
+                    : srcAccountBalances[j].balance;
                 if (amountToBridge > 0) {
                     amountLeftToBridge -= amountToBridge;
 
@@ -1470,6 +1452,70 @@ library Actions {
         return (quarkOperation, action);
     }
 
+    function quotePay(QuotePayInfo memory quotePayInfo, PaymentInfo.Payment memory payment)
+        internal
+        pure
+        returns (IQuarkWallet.QuarkOperation memory, Action memory)
+    {
+        bytes[] memory scriptSources = new bytes[](1);
+        scriptSources[0] = type(QuotePay).creationCode;
+
+        Accounts.ChainAccounts memory accounts =
+            Accounts.findChainAccounts(quotePayInfo.chainId, quotePayInfo.chainAccountsList);
+
+        Accounts.AssetPositions memory assetPositions =
+            Accounts.findAssetPositions(quotePayInfo.assetSymbol, accounts.assetPositionsList);
+
+        Accounts.QuarkSecret memory accountSecret = Accounts.findQuarkSecret(quotePayInfo.sender, accounts.quarkSecrets);
+
+        bytes memory scriptCalldata = abi.encodeWithSelector(
+            QuotePay.pay.selector,
+            // TODO: DOES THIS WORK IN A MULTI-ACCOUNT WORLD?
+            quotePayInfo.sender,
+            assetPositions.asset,
+            quotePayInfo.amount,
+            payment.quoteId
+        );
+        // Construct QuarkOperation
+        IQuarkWallet.QuarkOperation memory quarkOperation = IQuarkWallet.QuarkOperation({
+            nonce: accountSecret.nonceSecret,
+            isReplayable: false,
+            scriptAddress: CodeJarHelper.getCodeAddress(type(QuotePay).creationCode),
+            scriptCalldata: scriptCalldata,
+            scriptSources: scriptSources,
+            expiry: quotePayInfo.blockTimestamp + STANDARD_EXPIRY_BUFFER
+        });
+
+        // Construct Action
+        QuotePayActionContext memory quotePayActionContext = QuotePayActionContext({
+            amount: quotePayInfo.amount,
+            price: assetPositions.usdPrice,
+            token: assetPositions.asset,
+            assetSymbol: assetPositions.symbol,
+            chainId: quotePayInfo.chainId,
+            quoteId: payment.quoteId,
+            payee: quotePayInfo.sender
+        });
+
+        Action memory action = Actions.Action({
+            chainId: quotePayInfo.chainId,
+            quarkAccount: quotePayInfo.sender,
+            actionType: ACTION_TYPE_QUOTE_PAY,
+            actionContext: abi.encode(quotePayActionContext),
+            // TODO: UPDATE THIS (paymentMethodForPayment)
+            paymentMethod: PaymentInfo.paymentMethodForPayment(payment, true),
+            paymentToken: payment.isToken
+                ? PaymentInfo.knownToken(payment.currency, quotePayInfo.chainId).token
+                : PaymentInfo.NON_TOKEN_PAYMENT,
+            paymentTokenSymbol: payment.currency,
+            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, quotePayInfo.chainId) : 0,
+            nonceSecret: accountSecret.nonceSecret,
+            totalPlays: 1
+        });
+
+        return (quarkOperation, action);
+    }
+
     function wrapOrUnwrapAsset(
         WrapOrUnwrapAsset memory wrapOrUnwrap,
         PaymentInfo.Payment memory payment,
@@ -1491,7 +1537,7 @@ library Actions {
             isReplayable: false,
             scriptAddress: CodeJarHelper.getCodeAddress(type(WrapperActions).creationCode),
             scriptCalldata: TokenWrapper.encodeActionToWrapOrUnwrap(
-                wrapOrUnwrap.chainId, wrapOrUnwrap.assetSymbol, wrapOrUnwrap.amount
+                wrapOrUnwrap.chainId, wrapOrUnwrap.assetSymbol, wrapOrUnwrap.amountNeeded
             ),
             scriptSources: scriptSources,
             expiry: wrapOrUnwrap.blockTimestamp + STANDARD_EXPIRY_BUFFER
@@ -1500,7 +1546,7 @@ library Actions {
         // Construct Action
         WrapOrUnwrapActionContext memory wrapOrUnwrapActionContext = WrapOrUnwrapActionContext({
             chainId: wrapOrUnwrap.chainId,
-            amount: wrapOrUnwrap.amount,
+            amount: wrapOrUnwrap.amountNeeded - wrapOrUnwrap.balanceOnChain,
             token: assetPositions.asset,
             fromAssetSymbol: assetPositions.symbol,
             toAssetSymbol: TokenWrapper.getWrapperCounterpartSymbol(wrapOrUnwrap.chainId, assetPositions.symbol)
@@ -1604,6 +1650,7 @@ library Actions {
         return (quarkOperation, action);
     }
 
+    // TODO: NEED TO SOMEHOW USE PAYCALL INSTEAD OF QUOTEPAY HERE...
     function recurringSwap(RecurringSwapParams memory swap, PaymentInfo.Payment memory payment, bool useQuotecall)
         internal
         pure

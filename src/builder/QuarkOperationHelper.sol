@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 pragma solidity ^0.8.27;
 
+import {console} from "src/builder/console.sol";
+
 import {IQuarkWallet} from "quark-core/src/interfaces/IQuarkWallet.sol";
 
 import {Multicall} from "src/Multicall.sol";
@@ -13,6 +15,7 @@ import {PaymentInfo} from "src/builder/PaymentInfo.sol";
 import {QuotecallWrapper} from "src/builder/QuotecallWrapper.sol";
 import {List} from "src/builder/List.sol";
 import {HashMap} from "src/builder/HashMap.sol";
+import {Strings} from "src/builder/Strings.sol";
 
 // Helper library to for transforming Quark Operations
 library QuarkOperationHelper {
@@ -97,18 +100,33 @@ library QuarkOperationHelper {
 
         // Construct Quark Operation and Action
         // Note: We give precedence to the last operation and action for now because any earlier operations
-        // are auxiliary (e.g. wrapping an asset)
-        IQuarkWallet.QuarkOperation memory lastQuarkOperation = quarkOperations[quarkOperations.length - 1];
+        // are auxiliary (e.g. wrapping an asset). However, if the last action is a quote pay, we'll take the
+        // second to last action instead when the list of actions has more than one action in it.
+        IQuarkWallet.QuarkOperation memory primaryQuarkOperation;
+        Actions.Action memory primaryAction;
+        if (
+            actions.length > 1
+                && Strings.stringEq(actions[actions.length - 1].actionType, Actions.ACTION_TYPE_QUOTE_PAY)
+        ) {
+            primaryQuarkOperation = quarkOperations[quarkOperations.length - 2];
+            primaryAction = actions[actions.length - 2];
+            console.log("Taking second to last");
+        } else {
+            primaryQuarkOperation = quarkOperations[quarkOperations.length - 1];
+            primaryAction = actions[actions.length - 1];
+            console.log("Taking last");
+        }
+        // IQuarkWallet.QuarkOperation memory lastQuarkOperation = quarkOperations[quarkOperations.length - 1];
         IQuarkWallet.QuarkOperation memory mergedQuarkOperation = IQuarkWallet.QuarkOperation({
-            nonce: lastQuarkOperation.nonce,
-            isReplayable: lastQuarkOperation.isReplayable,
+            nonce: primaryQuarkOperation.nonce,
+            isReplayable: primaryQuarkOperation.isReplayable,
             scriptAddress: CodeJarHelper.getCodeAddress(type(Multicall).creationCode),
             scriptCalldata: multicallCalldata,
             scriptSources: scriptSources,
-            expiry: lastQuarkOperation.expiry
+            expiry: primaryQuarkOperation.expiry
         });
 
-        return (mergedQuarkOperation, actions[actions.length - 1]);
+        return (mergedQuarkOperation, primaryAction);
     }
 
     function wrapOperationsWithTokenPayment(

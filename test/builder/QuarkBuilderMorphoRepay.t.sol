@@ -424,7 +424,7 @@ contract QuarkBuilderMorphoRepayTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testCometRepayWithBridge() public {
+    function testMorphoRepayWithBridge() public {
         QuarkBuilder builder = new QuarkBuilder();
 
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
@@ -604,7 +604,7 @@ contract QuarkBuilderMorphoRepayTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testCometRepayMax() public {
+    function testMorphoRepayMax() public {
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
 
@@ -723,7 +723,7 @@ contract QuarkBuilderMorphoRepayTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testCometRepayMaxWithBridge() public {
+    function testMorphoRepayMaxWithBridge() public {
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
         maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.1e6});

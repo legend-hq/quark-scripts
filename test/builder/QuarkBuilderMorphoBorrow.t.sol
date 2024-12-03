@@ -57,7 +57,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         });
     }
 
-    function testBorrowInvalidMarketParams() public {
+    function testMorphoBorrowInvalidMarketParams() public {
         QuarkBuilder builder = new QuarkBuilder();
         ChainPortfolio[] memory chainPortfolios = new ChainPortfolio[](2);
         chainPortfolios[0] = ChainPortfolio({
@@ -90,7 +90,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         );
     }
 
-    function testBorrowFundsUnavailable() public {
+    function testMorphoBorrowFundsUnavailable() public {
         QuarkBuilder builder = new QuarkBuilder();
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "WBTC", 1e8, 0));
         builder.morphoBorrow(
@@ -100,7 +100,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         );
     }
 
-    function testBorrowSuccess() public {
+    function testMorphoBorrowSuccess() public {
         ChainPortfolio[] memory chainPortfolios = new ChainPortfolio[](2);
         chainPortfolios[0] = ChainPortfolio({
             chainId: 1,
@@ -187,7 +187,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testBorrowWithAutoWrapper() public {
+    function testMorphoBorrowWithAutoWrapper() public {
         ChainPortfolio[] memory chainPortfolios = new ChainPortfolio[](2);
         chainPortfolios[0] = ChainPortfolio({
             chainId: 1,
@@ -291,7 +291,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testBorrowWithPaycall() public {
+    function testMorphoBorrowWithPaycall() public {
         ChainPortfolio[] memory chainPortfolios = new ChainPortfolio[](2);
         chainPortfolios[0] = ChainPortfolio({
             chainId: 1,
@@ -397,7 +397,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testBorrowPayFromBorrow() public {
+    function testMorphoBorrowPayFromBorrow() public {
         ChainPortfolio[] memory chainPortfolios = new ChainPortfolio[](2);
         chainPortfolios[0] = ChainPortfolio({
             chainId: 1,
@@ -503,7 +503,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testBorrowWithBridgedPaymentToken() public {
+    function testMorphoBorrowWithBridgedPaymentToken() public {
         ChainPortfolio[] memory chainPortfolios = new ChainPortfolio[](2);
         chainPortfolios[0] = ChainPortfolio({
             chainId: 1,

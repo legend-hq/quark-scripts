@@ -128,8 +128,7 @@ contract QuarkBuilderRecurringSwapTest is Test, QuarkBuilderTest {
 
     function testMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        // Max cost is too high, so total available funds is 0
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 30e6, 0e6));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
         builder.recurringSwap(
             buyWeth_({
                 chainId: 1,
@@ -167,13 +166,13 @@ contract QuarkBuilderRecurringSwapTest is Test, QuarkBuilderTest {
 
     function testFundsUnavailableErrorGivesSuggestionForAvailableFunds() public {
         QuarkBuilder builder = new QuarkBuilder();
-        // The 27e6 is the suggested amount (total available funds) to swap
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 30e6, 27e6));
+        // The 30e6 is the suggested amount (total available funds) to swap
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 35e6, 30e6));
         builder.recurringSwap(
             buyWeth_({
                 chainId: 1,
                 sellToken: usdc_(1),
-                sellAmount: 30e6,
+                sellAmount: 35e6,
                 buyAmount: 0.01e18,
                 isExactOut: true,
                 interval: 86_400,

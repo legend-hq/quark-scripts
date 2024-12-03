@@ -290,16 +290,13 @@ contract CometActionsBuilder is QuarkBuilderBase {
 
         uint256 actualWithdrawAmount = cometWithdrawIntent.amount;
         if (isMaxWithdraw) {
-            actualWithdrawAmount = 0;
-            // When doing a maxWithdraw will need to find the actual amount instead of uint256 max
-            Accounts.CometPositions memory cometPositions =
-                Accounts.findCometPositions(cometWithdrawIntent.chainId, cometWithdrawIntent.comet, chainAccountsList);
-
-            for (uint256 i = 0; i < cometPositions.basePosition.accounts.length; ++i) {
-                if (cometPositions.basePosition.accounts[i] == cometWithdrawIntent.withdrawer) {
-                    actualWithdrawAmount += cometPositions.basePosition.supplied[i];
-                }
-            }
+            // When doing a max withdraw, we need to find the actual approximate amount instead of using uint256 max
+            actualWithdrawAmount = cometWithdrawMaxAmount(
+                chainAccountsList,
+                cometWithdrawIntent.chainId,
+                cometWithdrawIntent.comet,
+                cometWithdrawIntent.withdrawer
+            );
         }
 
         (IQuarkWallet.QuarkOperation memory cometWithdrawQuarkOperation, Actions.Action memory cometWithdrawAction) =

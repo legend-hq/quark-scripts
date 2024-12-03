@@ -63,8 +63,7 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
 
     function testMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        // Max cost is too high, so total available funds is 0
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 1e6, 0e6));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
         builder.morphoVaultSupply(
             MorphoVaultActionsBuilder.MorphoVaultSupplyIntent({
                 amount: 1e6,

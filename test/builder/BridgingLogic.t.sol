@@ -2,7 +2,6 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
-import "forge-std/console.sol";
 
 import {QuarkBuilderTest} from "test/builder/lib/QuarkBuilderTest.sol";
 

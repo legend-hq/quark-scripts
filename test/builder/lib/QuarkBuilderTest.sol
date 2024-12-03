@@ -59,6 +59,8 @@ contract QuarkBuilderTest {
     bytes32 constant BOB_DEFAULT_SECRET = bytes32(uint256(2));
     bytes32 constant COB_DEFAULT_SECRET = bytes32(uint256(5));
 
+    bytes32 constant QUOTE_ID = bytes32("QUOTE_ID");
+
     /**
      *
      * Fixture Functions
@@ -76,7 +78,7 @@ contract QuarkBuilderTest {
         pure
         returns (PaymentInfo.Payment memory)
     {
-        return PaymentInfo.Payment({isToken: true, currency: "usdc", maxCosts: maxCosts});
+        return PaymentInfo.Payment({isToken: true, currency: "usdc", quoteId: QUOTE_ID, maxCosts: maxCosts});
     }
 
     function paymentUsd_() internal pure returns (PaymentInfo.Payment memory) {
@@ -88,7 +90,7 @@ contract QuarkBuilderTest {
         pure
         returns (PaymentInfo.Payment memory)
     {
-        return PaymentInfo.Payment({isToken: false, currency: "usd", maxCosts: maxCosts});
+        return PaymentInfo.Payment({isToken: false, currency: "usd", quoteId: bytes32(""), maxCosts: maxCosts});
     }
 
     // TODO: refactor

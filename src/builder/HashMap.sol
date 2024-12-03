@@ -30,6 +30,18 @@ library HashMap {
         revert KeyNotFound();
     }
 
+    function getOrDefault(Map memory map, bytes memory key, bytes memory fallbackValue)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        if (contains(map, key)) {
+            return get(map, key);
+        } else {
+            return fallbackValue;
+        }
+    }
+
     function contains(Map memory map, bytes memory key) internal pure returns (bool) {
         for (uint256 i = 0; i < map.entries.length; ++i) {
             Entry memory entry = abi.decode(List.get(map.entries, i), (Entry));
@@ -96,8 +108,21 @@ library HashMap {
         return abi.decode(get(map, key), (uint256));
     }
 
+    function getOrDefaultUint256(Map memory map, bytes memory key, uint256 fallbackValue)
+        internal
+        pure
+        returns (uint256)
+    {
+        return abi.decode(getOrDefault(map, key, abi.encode(fallbackValue)), (uint256));
+    }
+
     function putUint256(Map memory map, bytes memory key, uint256 value) internal pure returns (Map memory) {
         return put(map, key, abi.encode(value));
+    }
+
+    function addOrPutUint256(Map memory map, bytes memory key, uint256 value) internal pure returns (Map memory) {
+        uint256 existingValue = getOrDefaultUint256(map, key, 0);
+        return HashMap.putUint256(map, key, existingValue + value);
     }
 
     function keysUint256(Map memory map) internal pure returns (uint256[] memory) {

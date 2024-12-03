@@ -107,11 +107,9 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         );
     }
 
-    // TODO: This no longer tests for the MaxCostTooHigh, since it may be unreachable now. Verify that this is the case.
     function testMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        // Max cost is too high, so total available funds is 0
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 30e6, 0e6));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
         builder.swap(
             buyWeth_(1, usdc_(1), 30e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 30 USDC on chain 1 to 0.01 WETH
             chainAccountsList_(60e6), // holding 60 USDC in total across chains 1, 8453
@@ -133,10 +131,10 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
 
     function testFundsUnavailableErrorGivesSuggestionForAvailableFunds() public {
         QuarkBuilder builder = new QuarkBuilder();
-        // The 32e6 is the suggested amount (total available funds) to swap
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 30e6, 27e6));
+        // The 30e6 is the suggested amount (total available funds) to swap
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 35e6, 30e6));
         builder.swap(
-            buyWeth_(1, usdc_(1), 30e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 30 USDC on chain 1 to 0.01 WETH
+            buyWeth_(1, usdc_(1), 35e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 30 USDC on chain 1 to 0.01 WETH
             chainAccountsList_(60e6), // holding 60 USDC in total across 1, 8453
             paymentUsdc_(maxCosts_(1, 3e6)) // but costs 3 USDC
         );
@@ -1115,32 +1113,14 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 1e6});
 
         // Note: There are 2000e6 USDC on each chain, so the Builder should attempt to bridge 1001 USDC to chain 8453.
-        // The extra 1 USDC is to cover the payment max cost on chain 8453.
         // However, max cost is not specified for chain 1, so the Builder will ignore the chain and revert because
         // there will be insufficient funds for the transfer.
 
         // The `FundsAvailable` error tells us that 3000 USDC was asked to be swap, but only 1999 USDC was available.
-        // (1999 USDC instead of 2000 USDC because 1 USDC is reserved for the payment max cost)
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 3000e6, 1999e6));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 3000e6, 2000e6));
         builder.swap(
             buyWeth_(8453, usdc_(8453), 3000e6, 1e18, address(0xc0b), BLOCK_TIMESTAMP), // swap 3000 USDC on chain 8453 to 1 WETH
             chainAccountsList_(4000e6), // holding 4000 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
-        );
-    }
-
-    function testRevertsIfNotEnoughFundsToBridge() public {
-        QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 3000e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 3001e6});
-
-        // Note: Need to bridge 1 USDC to cover max cost on chain 8453, but there is 0 available to bridge from chain 1 because they
-        // are all reserved for the max cost on chain 1.
-        vm.expectRevert(abi.encodeWithSelector(Actions.NotEnoughFundsToBridge.selector, "usdc", 1e6, 1e6));
-        builder.swap(
-            buyWeth_(8453, usdt_(8453), 3000e6, 1e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 3000 USDT on chain 8453 to 1 WETH
-            chainAccountsList_(6000e6), // holding 6000 USDT in total across chains 1, 8453
             paymentUsdc_(maxCosts)
         );
     }

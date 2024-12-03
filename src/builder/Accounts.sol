@@ -211,11 +211,11 @@ library Accounts {
     }
 
     function sumBalances(AssetPositions memory assetPositions) internal pure returns (uint256) {
-        uint256 totalBalance = 0;
+        uint256 total = 0;
         for (uint256 i = 0; i < assetPositions.accountBalances.length; ++i) {
-            totalBalance += assetPositions.accountBalances[i].balance;
+            total += assetPositions.accountBalances[i].balance;
         }
-        return totalBalance;
+        return total;
     }
 
     function getBalanceOnChain(string memory assetSymbol, uint256 chainId, ChainAccounts[] memory chainAccountsList)
@@ -248,7 +248,7 @@ library Accounts {
             );
 
             // Account for max cost if the payment token is the transfer token
-            // Simply offset the max cost from the available asset batch
+            // Simply subtract the max cost from the available asset batch
             if (payment.isToken && Strings.stringEqIgnoreCase(payment.currency, tokenSymbol)) {
                 // Use subtractFlooredAtZero to prevent errors from underflowing
                 balance =
@@ -256,7 +256,7 @@ library Accounts {
             }
 
             // If the wrapper contract exists in the chain, add the balance of the wrapped/unwrapped token here as well
-            // Offset with another max cost for wrapping/unwrapping action when the counter part is payment token
+            // Subtract with another max cost for wrapping/unwrapping action when the counter part is payment token
             uint256 counterpartBalance = 0;
             if (TokenWrapper.hasWrapperContract(chainAccountsList[i].chainId, tokenSymbol)) {
                 // Add the balance of the wrapped token
@@ -267,7 +267,7 @@ library Accounts {
                         chainAccountsList
                     )
                 );
-                // If the wrapped token is the payment token, offset the max cost
+                // If the wrapped token is the payment token, subtract the max cost
                 if (
                     payment.isToken
                         && Strings.stringEqIgnoreCase(
@@ -279,6 +279,42 @@ library Accounts {
                         counterpartBalance, PaymentInfo.findMaxCost(payment, chainAccountsList[i].chainId)
                     );
                 }
+            }
+
+            total += balance + counterpartBalance;
+        }
+        return total;
+    }
+
+    /*
+    * @notice Get the total asset balance for a given token symbol across chains
+    * @param tokenSymbol The token symbol to check
+    * @param chainAccountsList The list of chain accounts to check
+    * @return The total available asset balance
+    */
+    function totalBalance(string memory tokenSymbol, Accounts.ChainAccounts[] memory chainAccountsList)
+        internal
+        pure
+        returns (uint256)
+    {
+        uint256 total = 0;
+
+        for (uint256 i = 0; i < chainAccountsList.length; ++i) {
+            uint256 balance = Accounts.sumBalances(
+                Accounts.findAssetPositions(tokenSymbol, chainAccountsList[i].chainId, chainAccountsList)
+            );
+
+            // If the wrapper contract exists in the chain, add the balance of the wrapped/unwrapped token here as well
+            uint256 counterpartBalance = 0;
+            if (TokenWrapper.hasWrapperContract(chainAccountsList[i].chainId, tokenSymbol)) {
+                // Add the balance of the wrapped token
+                counterpartBalance += Accounts.sumBalances(
+                    Accounts.findAssetPositions(
+                        TokenWrapper.getWrapperCounterpartSymbol(chainAccountsList[i].chainId, tokenSymbol),
+                        chainAccountsList[i].chainId,
+                        chainAccountsList
+                    )
+                );
             }
 
             total += balance + counterpartBalance;
