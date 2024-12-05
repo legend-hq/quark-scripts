@@ -10,14 +10,13 @@ import {Actions} from "src/builder/actions/Actions.sol";
 import {CCTPBridgeActions} from "src/BridgeScripts.sol";
 import {CodeJarHelper} from "src/builder/CodeJarHelper.sol";
 import {CometSupplyActions, TransferActions} from "src/DeFiScripts.sol";
-import {Paycall} from "src/Paycall.sol";
 import {MorphoInfo} from "src/builder/MorphoInfo.sol";
 import {MorphoVaultActions} from "src/MorphoScripts.sol";
 import {Multicall} from "src/Multicall.sol";
-import {Quotecall} from "src/Quotecall.sol";
 import {QuarkBuilder} from "src/builder/QuarkBuilder.sol";
 import {QuarkBuilderBase} from "src/builder/QuarkBuilderBase.sol";
 import {WrapperActions} from "src/WrapperScripts.sol";
+import {QuotePay} from "src/QuotePay.sol";
 
 contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
     function morphoSupplyIntent_(uint256 chainId, uint256 amount, string memory assetSymbol)
@@ -364,7 +363,7 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testMorphoVaultSupplyWithPaycall() public {
+    function testMorphoVaultSupplyWithQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
@@ -375,7 +374,8 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         );
 
         address morphoVaultActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoVaultActions).creationCode);
-        address paycallAddress = paycallUsdc_(1);
+        address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
+        address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
         assertEq(result.paymentCurrency, "usdc", "usdc currency");
 
@@ -383,20 +383,21 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations.length, 1, "one operation");
         assertEq(
             result.quarkOperations[0].scriptAddress,
-            paycallAddress,
+            multicallAddress,
             "script address is correct given the code jar address on mainnet"
         );
+        address[] memory callContracts = new address[](2);
+        callContracts[0] = morphoVaultActionsAddress;
+        callContracts[1] = quotePayAddress;
+        bytes[] memory callDatas = new bytes[](2);
+        callDatas[0] = abi.encodeWithSelector(
+            MorphoVaultActions.deposit.selector, MorphoInfo.getMorphoVaultAddress(1, "USDC"), usdc_(1), 1e6
+        );
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                morphoVaultActionsAddress,
-                abi.encodeWithSelector(
-                    MorphoVaultActions.deposit.selector, MorphoInfo.getMorphoVaultAddress(1, "USDC"), usdc_(1), 1e6
-                ),
-                0.1e6
-            ),
-            "calldata is Paycall.run(MorphoVaultActions.deposit(MorphoInfo.getMorphoVaultAddress(1, USDC), usdc_(1), 1e6), 0.1e6);"
+            abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
+            "calldata is Multicall.run([morphoVaultActionsAddress, quotePayAddress], [MorphoVaultActions.deposit(MorphoInfo.getMorphoVaultAddress(1, USDC), usdc_(1), 1e6), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -667,22 +668,23 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testMorphoVaultSupplyMaxWithBridgeAndQuotecall() public {
+    function testMorphoVaultSupplyMaxWithBridgeAndQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6});
         maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.1e6});
 
-        // Note: There are 3e6 USDC on each chain, so the Builder should attempt to bridge 2 USDC to chain 8453
+        // Note: There are 3e6 USDC on each chain, so the Builder should attempt to bridge 3 - cost (0.6) USDC to chain 8453
         QuarkBuilder.BuilderResult memory result = builder.morphoVaultSupply(
             morphoSupplyIntent_(8453, type(uint256).max, "USDC", address(0xb0b)),
             chainAccountsList_(6e6), // holding 3 USDC in total across chains 1, 8453
             paymentUsdc_(maxCosts)
         );
 
-        address quotecallAddress = quotecallUsdc_(1);
-        address quotecallAddressBase = quotecallUsdc_(8453);
         address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);
+        address morphoVaultActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoVaultActions).creationCode);
+        address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
+        address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
         assertEq(result.paymentCurrency, "usdc", "usd currency");
 
@@ -691,25 +693,26 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         // first operation
         assertEq(
             result.quarkOperations[0].scriptAddress,
-            quotecallAddress,
-            "script address[0] has been wrapped with quotecall address"
+            multicallAddress,
+            "script address[0] has been wrapped with multicall address"
         );
+        address[] memory callContracts = new address[](2);
+        callContracts[0] = cctpBridgeActionsAddress;
+        callContracts[1] = quotePayAddress;
+        bytes[] memory callDatas = new bytes[](2);
+        callDatas[0] = abi.encodeWithSelector(
+            CCTPBridgeActions.bridgeUSDC.selector,
+            address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155),
+            2.4e6, // 3e6 - 0.5e6 - 0.1e6
+            6,
+            bytes32(uint256(uint160(0xb0b))),
+            usdc_(1)
+        );
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.6e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Quotecall.run.selector,
-                cctpBridgeActionsAddress,
-                abi.encodeWithSelector(
-                    CCTPBridgeActions.bridgeUSDC.selector,
-                    address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155),
-                    2.5e6, // 3e6 - 0.5e6
-                    6,
-                    bytes32(uint256(uint160(0xb0b))),
-                    usdc_(1)
-                ),
-                0.5e6
-            ),
-            "calldata is Quotecall.run(CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2.1e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1))), 0.5e6);"
+            abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
+            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2.4e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1))), QuotePay.pay(address(0xa11ce), USDC_1, 0.6e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -718,22 +721,13 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations[0].isReplayable, false, "isReplayable is false");
 
         // second operation
-        assertEq(
-            result.quarkOperations[1].scriptAddress,
-            quotecallAddressBase,
-            "script address[1] has been wrapped with quotecall address"
-        );
+        assertEq(result.quarkOperations[1].scriptAddress, morphoVaultActionsAddress, "script address[1] is correct");
         assertEq(
             result.quarkOperations[1].scriptCalldata,
-            abi.encodeWithSelector(
-                Quotecall.run.selector,
-                CodeJarHelper.getCodeAddress(type(MorphoVaultActions).creationCode),
-                abi.encodeCall(
-                    MorphoVaultActions.deposit, (MorphoInfo.getMorphoVaultAddress(8453, "USDC"), usdc_(8453), 5.4e6)
-                ),
-                0.1e6
+            abi.encodeCall(
+                MorphoVaultActions.deposit, (MorphoInfo.getMorphoVaultAddress(8453, "USDC"), usdc_(8453), 5.4e6)
             ),
-            "calldata is Quotecall.run(MorphoVaultActions.deposit, (MorphoInfo.getMorphoVaultAddress(8453, USDC), usdc_(8453), 5.4e6)), 0.1e6);"
+            "calldata is MorphoVaultActions.deposit, (MorphoInfo.getMorphoVaultAddress(8453, USDC), usdc_(8453), 5.4e6));"
         );
         assertEq(
             result.quarkOperations[1].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -759,8 +753,8 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
                     price: USDC_PRICE,
                     token: USDC_1,
                     assetSymbol: "USDC",
-                    inputAmount: 2.5e6,
-                    outputAmount: 2.5e6,
+                    inputAmount: 2.4e6,
+                    outputAmount: 2.4e6,
                     chainId: 1,
                     recipient: address(0xb0b),
                     destinationChainId: 8453,
@@ -799,7 +793,7 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testMorphoVaultSupplyWithBridgeAndPaycall() public {
+    function testMorphoVaultSupplyWithBridgeAndQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6});
@@ -812,9 +806,10 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
             paymentUsdc_(maxCosts)
         );
 
-        address paycallAddress = paycallUsdc_(1);
-        address paycallAddressBase = paycallUsdc_(8453);
         address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);
+        address morphoVaultActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoVaultActions).creationCode);
+        address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
+        address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
         assertEq(result.paymentCurrency, "usdc", "usd currency");
 
@@ -823,25 +818,26 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         // first operation
         assertEq(
             result.quarkOperations[0].scriptAddress,
-            paycallAddress,
-            "script address[0] has been wrapped with paycall address"
+            multicallAddress,
+            "script address[0] has been wrapped with multicall address"
         );
+        address[] memory callContracts = new address[](2);
+        callContracts[0] = cctpBridgeActionsAddress;
+        callContracts[1] = quotePayAddress;
+        bytes[] memory callDatas = new bytes[](2);
+        callDatas[0] = abi.encodeWithSelector(
+            CCTPBridgeActions.bridgeUSDC.selector,
+            address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155),
+            2e6,
+            6,
+            bytes32(uint256(uint160(0xb0b))),
+            usdc_(1)
+        );
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.6e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                cctpBridgeActionsAddress,
-                abi.encodeWithSelector(
-                    CCTPBridgeActions.bridgeUSDC.selector,
-                    address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155),
-                    2.1e6,
-                    6,
-                    bytes32(uint256(uint160(0xb0b))),
-                    usdc_(1)
-                ),
-                0.5e6
-            ),
-            "calldata is Paycall.run(CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2.1e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1))), 0.5e6);"
+            abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
+            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1))), QuotePay.pay(address(0xa11ce), USDC_1, 0.6e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -850,22 +846,13 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations[0].isReplayable, false, "isReplayable is false");
 
         // second operation
-        assertEq(
-            result.quarkOperations[1].scriptAddress,
-            paycallAddressBase,
-            "script address[1] has been wrapped with paycall address"
-        );
+        assertEq(result.quarkOperations[1].scriptAddress, morphoVaultActionsAddress, "script address[1] is correct");
         assertEq(
             result.quarkOperations[1].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                CodeJarHelper.getCodeAddress(type(MorphoVaultActions).creationCode),
-                abi.encodeCall(
-                    MorphoVaultActions.deposit, (MorphoInfo.getMorphoVaultAddress(8453, "USDC"), usdc_(8453), 5e6)
-                ),
-                0.1e6
+            abi.encodeCall(
+                MorphoVaultActions.deposit, (MorphoInfo.getMorphoVaultAddress(8453, "USDC"), usdc_(8453), 5e6)
             ),
-            "calldata is Paycall.run(MorphoInfo.getMorphoVaultAddress(8453, USDC), usdc_(8453), 5e6), 0.1e6);"
+            "calldata is MorphoInfo.getMorphoVaultAddress(8453, USDC), usdc_(8453), 5e6);"
         );
         assertEq(
             result.quarkOperations[1].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -891,8 +878,8 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
                     price: USDC_PRICE,
                     token: USDC_1,
                     assetSymbol: "USDC",
-                    inputAmount: 2.1e6,
-                    outputAmount: 2.1e6,
+                    inputAmount: 2e6,
+                    outputAmount: 2e6,
                     chainId: 1,
                     recipient: address(0xb0b),
                     destinationChainId: 8453,

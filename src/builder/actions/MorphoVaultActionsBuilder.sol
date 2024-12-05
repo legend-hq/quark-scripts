@@ -121,20 +121,9 @@ contract MorphoVaultActionsBuilder is QuarkBuilderBase {
 
         uint256 actualWithdrawAmount = withdrawIntent.amount;
         if (isMaxWithdraw) {
-            actualWithdrawAmount = 0;
-            // when doing a maxWithdraw of the payment token, add the account's supplied balance
-            // as supplemental payment token balance
-            Accounts.MorphoVaultPositions memory morphoVaultPositions = Accounts.findMorphoVaultPositions(
-                withdrawIntent.chainId,
-                Accounts.findAssetPositions(withdrawIntent.assetSymbol, withdrawIntent.chainId, chainAccountsList).asset,
-                chainAccountsList
+            actualWithdrawAmount = morphoWithdrawMaxAmount(
+                chainAccountsList, withdrawIntent.chainId, withdrawIntent.assetSymbol, withdrawIntent.withdrawer
             );
-
-            for (uint256 i = 0; i < morphoVaultPositions.accounts.length; ++i) {
-                if (morphoVaultPositions.accounts[i] == withdrawIntent.withdrawer) {
-                    actualWithdrawAmount += morphoVaultPositions.balances[i];
-                }
-            }
         }
 
         (IQuarkWallet.QuarkOperation memory cometWithdrawQuarkOperation, Actions.Action memory cometWithdrawAction) =

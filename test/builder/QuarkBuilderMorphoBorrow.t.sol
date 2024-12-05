@@ -12,12 +12,12 @@ import {Actions} from "src/builder/actions/Actions.sol";
 import {CCTPBridgeActions} from "src/BridgeScripts.sol";
 import {CodeJarHelper} from "src/builder/CodeJarHelper.sol";
 import {MorphoActions} from "src/MorphoScripts.sol";
-import {Paycall} from "src/Paycall.sol";
 import {Strings} from "src/builder/Strings.sol";
 import {Multicall} from "src/Multicall.sol";
 import {WrapperActions} from "src/WrapperScripts.sol";
 import {MorphoInfo} from "src/builder/MorphoInfo.sol";
 import {TokenWrapper} from "src/builder/TokenWrapper.sol";
+import {QuotePay} from "src/QuotePay.sol";
 
 contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
     function borrowIntent_(
@@ -291,7 +291,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testMorphoBorrowWithPaycall() public {
+    function testMorphoBorrowWithQuotePay() public {
         ChainPortfolio[] memory chainPortfolios = new ChainPortfolio[](2);
         chainPortfolios[0] = ChainPortfolio({
             chainId: 1,
@@ -324,8 +324,9 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
             paymentUsdc_(maxCosts)
         );
 
-        address MorphoActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoActions).creationCode);
-        address paycallAddress = paycallUsdc_(1);
+        address morphoActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoActions).creationCode);
+        address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
+        address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
         assertEq(result.paymentCurrency, "usdc", "usdc currency");
 
@@ -333,29 +334,27 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations.length, 1, "one operation");
         assertEq(
             result.quarkOperations[0].scriptAddress,
-            paycallAddress,
+            multicallAddress,
             "script address is correct given the code jar address on mainnet"
         );
-
+        address[] memory callContracts = new address[](2);
+        callContracts[0] = morphoActionsAddress;
+        callContracts[1] = quotePayAddress;
+        bytes[] memory callDatas = new bytes[](2);
+        callDatas[0] = abi.encodeCall(
+            MorphoActions.supplyCollateralAndBorrow,
+            (MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, "WBTC", "USDC"), 1e8, 1e6)
+        );
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                MorphoActionsAddress,
-                abi.encodeCall(
-                    MorphoActions.supplyCollateralAndBorrow,
-                    (MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, "WBTC", "USDC"), 1e8, 1e6)
-                ),
-                0.1e6
-            ),
-            "calldata is Paycall.run(MorphoActions.supplyCollateralAndBorrow(MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, WBTC, USDC), 1e8, 1e6, address(0xa11ce), address(0xa11ce));"
+            abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
+            "calldata is Multicall.run([morphoActionsAddress, quotePayAddress], [MorphoActions.supplyCollateralAndBorrow(MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, WBTC, USDC), 1e8, 1e6, address(0xa11ce), address(0xa11ce)), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
-        assertEq(result.quarkOperations[0].scriptSources.length, 2);
+        assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(MorphoActions).creationCode);
-        assertEq(
-            result.quarkOperations[0].scriptSources[1],
-            abi.encodePacked(type(Paycall).creationCode, abi.encode(ETH_USD_PRICE_FEED_1, USDC_1))
-        );
+        assertEq(result.quarkOperations[0].scriptSources[1], type(QuotePay).creationCode);
+        assertEq(result.quarkOperations[0].scriptSources[2], type(Multicall).creationCode);
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
         );
@@ -430,8 +429,9 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
             paymentUsdc_(maxCosts)
         );
 
-        address MorphoActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoActions).creationCode);
-        address paycallAddress = paycallUsdc_(1);
+        address morphoActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoActions).creationCode);
+        address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
+        address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
         assertEq(result.paymentCurrency, "usdc", "usdc currency");
 
@@ -439,29 +439,27 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations.length, 1, "one operation");
         assertEq(
             result.quarkOperations[0].scriptAddress,
-            paycallAddress,
+            multicallAddress,
             "script address is correct given the code jar address on mainnet"
         );
-
+        address[] memory callContracts = new address[](2);
+        callContracts[0] = morphoActionsAddress;
+        callContracts[1] = quotePayAddress;
+        bytes[] memory callDatas = new bytes[](2);
+        callDatas[0] = abi.encodeCall(
+            MorphoActions.supplyCollateralAndBorrow,
+            (MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, "WBTC", "USDC"), 1e8, 1e6)
+        );
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                MorphoActionsAddress,
-                abi.encodeCall(
-                    MorphoActions.supplyCollateralAndBorrow,
-                    (MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, "WBTC", "USDC"), 1e8, 1e6)
-                ),
-                0.1e6
-            ),
-            "calldata is Paycall.run(MorphoActions.supplyCollateralAndBorrow(MorphoInfo.getMorphoAddress(), MorphoInfo.getMarketParams(1, WBTC, USDC), 1e8, 1e6, address(0xa11ce), address(0xa11ce));"
+            abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
+            "calldata is Multicall.run([morphoActionsAddress, quotePayAddress], [MorphoActions.supplyCollateralAndBorrow(MorphoInfo.getMorphoAddress(), MorphoInfo.getMarketParams(1, WBTC, USDC), 1e8, 1e6, address(0xa11ce), address(0xa11ce)), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
-        assertEq(result.quarkOperations[0].scriptSources.length, 2);
+        assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(MorphoActions).creationCode);
-        assertEq(
-            result.quarkOperations[0].scriptSources[1],
-            abi.encodePacked(type(Paycall).creationCode, abi.encode(ETH_USD_PRICE_FEED_1, USDC_1))
-        );
+        assertEq(result.quarkOperations[0].scriptSources[1], type(QuotePay).creationCode);
+        assertEq(result.quarkOperations[0].scriptSources[2], type(Multicall).creationCode);
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
         );
@@ -503,186 +501,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testMorphoBorrowWithBridgedPaymentToken() public {
-        ChainPortfolio[] memory chainPortfolios = new ChainPortfolio[](2);
-        chainPortfolios[0] = ChainPortfolio({
-            chainId: 1,
-            account: address(0xa11ce),
-            nonceSecret: ALICE_DEFAULT_SECRET,
-            assetSymbols: Arrays.stringArray("USDC", "USDT", "cbETH", "WETH"),
-            assetBalances: Arrays.uintArray(5e6, 0, 0, 0),
-            cometPortfolios: emptyCometPortfolios_(),
-            morphoPortfolios: emptyMorphoPortfolios_(),
-            morphoVaultPortfolios: emptyMorphoVaultPortfolios_()
-        });
-        chainPortfolios[1] = ChainPortfolio({
-            chainId: 8453,
-            account: address(0xb0b),
-            nonceSecret: BOB_DEFAULT_SECRET,
-            assetSymbols: Arrays.stringArray("USDC", "USDT", "cbETH", "WETH"),
-            assetBalances: Arrays.uintArray(0, 0, 1e18, 0),
-            cometPortfolios: emptyCometPortfolios_(),
-            morphoPortfolios: emptyMorphoPortfolios_(),
-            morphoVaultPortfolios: emptyMorphoVaultPortfolios_()
-        });
-
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 1e6}); // max cost on base is 1 USDC
-
-        QuarkBuilder builder = new QuarkBuilder();
-        QuarkBuilder.BuilderResult memory result = builder.morphoBorrow(
-            borrowIntent_({
-                chainId: 8453,
-                assetSymbol: "WETH",
-                amount: 0.2e18,
-                collateralAssetSymbol: "cbETH",
-                collateralAmount: 1e18,
-                borrower: address(0xb0b)
-            }),
-            chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts)
-        );
-
-        address paycallAddress = paycallUsdc_(1);
-        address paycallAddressBase = paycallUsdc_(8453);
-        address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);
-        address MorphoActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoActions).creationCode);
-
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
-
-        // Check the quark operations
-        // first operation
-        assertEq(result.quarkOperations.length, 2, "two operations");
-        assertEq(
-            result.quarkOperations[0].scriptAddress,
-            paycallAddress,
-            "script address is correct given the code jar address on base"
-        );
-        assertEq(
-            result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                cctpBridgeActionsAddress,
-                abi.encodeWithSelector(
-                    CCTPBridgeActions.bridgeUSDC.selector,
-                    address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155),
-                    1e6,
-                    6,
-                    bytes32(uint256(uint160(0xb0b))),
-                    usdc_(1)
-                ),
-                0.1e6
-            ),
-            "calldata is Paycall.run(CCTPBridgeActions.bridgeUSDC(0xBd3fa81B58Ba92a82136038B25aDec7066af3155, 1e6, 6, 0xb0b, USDC_1)), 0.1e6);"
-        );
-        assertEq(result.quarkOperations[0].scriptSources.length, 2);
-        assertEq(result.quarkOperations[0].scriptSources[0], type(CCTPBridgeActions).creationCode);
-        assertEq(
-            result.quarkOperations[0].scriptSources[1],
-            abi.encodePacked(type(Paycall).creationCode, abi.encode(ETH_USD_PRICE_FEED_1, USDC_1))
-        );
-        assertEq(
-            result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
-        );
-        assertEq(result.quarkOperations[0].nonce, ALICE_DEFAULT_SECRET, "unexpected nonce");
-        assertEq(result.quarkOperations[0].isReplayable, false, "isReplayable is false");
-
-        // second operation
-        assertEq(
-            result.quarkOperations[1].scriptAddress,
-            paycallAddressBase,
-            "script address[1] has been wrapped with paycall address"
-        );
-
-        assertEq(
-            result.quarkOperations[1].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                MorphoActionsAddress,
-                abi.encodeCall(
-                    MorphoActions.supplyCollateralAndBorrow,
-                    (MorphoInfo.getMorphoAddress(8453), MorphoInfo.getMarketParams(8453, "cbETH", "WETH"), 1e18, 0.2e18)
-                ),
-                1e6
-            ),
-            "calldata is Paycall.run(MorphoActions.supplyCollateralAndBorrow(MorphoInfo.getMorphoAddress(8453), MorphoInfo.getMarketParams(8453, cbETH, WETH), 1e18, 0.2e18, address(0xa11ce), address(0xa11ce));"
-        );
-        assertEq(result.quarkOperations[1].scriptSources.length, 2);
-        assertEq(result.quarkOperations[1].scriptSources[0], type(MorphoActions).creationCode);
-        assertEq(
-            result.quarkOperations[1].scriptSources[1],
-            abi.encodePacked(type(Paycall).creationCode, abi.encode(ETH_USD_PRICE_FEED_8453, USDC_8453))
-        );
-        assertEq(
-            result.quarkOperations[1].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
-        );
-        assertEq(result.quarkOperations[1].nonce, BOB_DEFAULT_SECRET, "unexpected nonce");
-        assertEq(result.quarkOperations[1].isReplayable, false, "isReplayable is false");
-
-        // Check the actions
-        assertEq(result.actions.length, 2, "two actions");
-        // first action
-        assertEq(result.actions[0].chainId, 1, "operation is on chainid 1");
-        assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce sends the funds");
-        assertEq(result.actions[0].actionType, "BRIDGE", "action type is 'BRIDGE'");
-        assertEq(result.actions[0].paymentMethod, "PAY_CALL", "payment method is 'PAY_CALL'");
-        assertEq(result.actions[0].paymentToken, USDC_1, "payment token is USDC on mainnet");
-        assertEq(result.actions[0].paymentMaxCost, 0.1e6, "payment should have max cost of 0.1e6");
-        assertEq(result.actions[0].nonceSecret, ALICE_DEFAULT_SECRET, "unexpected nonce secret");
-        assertEq(result.actions[0].totalPlays, 1, "total plays is 1");
-        assertEq(
-            result.actions[0].actionContext,
-            abi.encode(
-                Actions.BridgeActionContext({
-                    price: USDC_PRICE,
-                    token: USDC_1,
-                    assetSymbol: "USDC",
-                    inputAmount: 1e6,
-                    outputAmount: 1e6,
-                    chainId: 1,
-                    recipient: address(0xb0b),
-                    destinationChainId: 8453,
-                    bridgeType: Actions.BRIDGE_TYPE_CCTP
-                })
-            ),
-            "action context encoded from BridgeActionContext"
-        );
-        // second action
-        assertEq(result.actions[1].chainId, 8453, "operation is on chainid 8453");
-        assertEq(result.actions[1].quarkAccount, address(0xb0b), "0xb0b sends the funds");
-        assertEq(result.actions[1].actionType, "MORPHO_BORROW", "action type is 'MORPHO_BORROW'");
-        assertEq(result.actions[1].paymentMethod, "PAY_CALL", "payment method is 'PAY_CALL'");
-        assertEq(result.actions[1].paymentToken, USDC_8453, "payment token is USDC on Base");
-        assertEq(result.actions[1].paymentMaxCost, 1e6, "payment should have max cost of 1e6");
-        assertEq(result.actions[1].nonceSecret, BOB_DEFAULT_SECRET, "unexpected nonce secret");
-        assertEq(result.actions[1].totalPlays, 1, "total plays is 1");
-        assertEq(
-            result.actions[1].actionContext,
-            abi.encode(
-                Actions.MorphoBorrowActionContext({
-                    amount: 0.2e18,
-                    assetSymbol: "WETH",
-                    chainId: 8453,
-                    collateralAmount: 1e18,
-                    collateralTokenPrice: CBETH_PRICE,
-                    collateralToken: cbEth_(8453),
-                    collateralAssetSymbol: "cbETH",
-                    price: WETH_PRICE,
-                    token: weth_(8453),
-                    morpho: MorphoInfo.getMorphoAddress(8453),
-                    morphoMarketId: MorphoInfo.marketId(MorphoInfo.getMarketParams(8453, "cbETH", "WETH"))
-                })
-            ),
-            "action context encoded from MorphoBorrowActionContext"
-        );
-
-        assertNotEq(result.eip712Data.digest, hex"", "non-empty digest");
-        assertNotEq(result.eip712Data.domainSeparator, hex"", "non-empty domain separator");
-        assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
-    }
-
-    function testMorphoBorrowMaxCostTooHighForBridgePaymentToken() public {
+    function testMorphoBorrowMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6}); // action costs .5 USDC
@@ -699,8 +518,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
             morphoVaultPortfolios: emptyMorphoVaultPortfolios_()
         });
 
-        vm.expectRevert(abi.encodeWithSelector(Actions.NotEnoughFundsToBridge.selector, "usdc", 0.1e6, 0.1e6));
-
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
         builder.morphoBorrow(
             borrowIntent_(1, "WETH", 1e18, "WBTC", 0),
             chainAccountsFromChainPortfolios(chainPortfolios),

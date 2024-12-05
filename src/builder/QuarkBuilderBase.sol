@@ -201,16 +201,8 @@ contract QuarkBuilderBase {
 
         console.log("added intent action to actions");
 
-        // Generate a QuotePay operation if the payment method is with tokens
-        if (payment.isToken) {
-            uint256 supplementalPaymentTokenBalance = 0;
-            // TODO: what is this supplemental balance? is it still needed. STILL NEEDED TO ACCOUNT FOR PAYMENT TAKEN IN
-            for (uint256 i = 0; i < actionIntent.assetSymbolIns.length; ++i) {
-                if (Strings.stringEqIgnoreCase(actionIntent.assetSymbolIns[i], payment.currency)) {
-                    supplementalPaymentTokenBalance += actionIntent.amountIns[i];
-                }
-            }
-
+        // Generate a QuotePay operation if the payment method is with tokens and the action is non-recurring
+        if (payment.isToken && !Actions.isRecurringAction(action)) {
             console.log("start generating quote pay");
 
             (IQuarkWallet.QuarkOperation memory quotePayOperation, Actions.Action memory quotePayAction) =
@@ -220,7 +212,6 @@ contract QuarkBuilderBase {
                     chainAccountsList: chainAccountsList,
                     targetChainId: actionIntent.chainId,
                     account: actionIntent.actor,
-                    supplementalPaymentTokenBalance: supplementalPaymentTokenBalance,
                     payment: payment,
                     actionIntent: actionIntent
                 })
@@ -239,6 +230,27 @@ contract QuarkBuilderBase {
         // Merge operations that are from the same chain into one Multicall operation
         (quarkOperationsArray, actionsArray) =
             QuarkOperationHelper.mergeSameChainOperations(quarkOperationsArray, actionsArray);
+
+        // Wrap operations around Paycall if payment is with token and the action is recurring
+        if (payment.isToken && Actions.isRecurringAction(action)) {
+            assertSufficientPaymentTokensForPaycall(
+                PaymentBalanceAssertionArgs({
+                    actions: List.toActionArray(actions),
+                    chainAccountsList: chainAccountsList,
+                    targetChainId: actionIntent.chainId,
+                    account: actionIntent.actor,
+                    payment: payment,
+                    actionIntent: actionIntent
+                })
+            );
+
+            quarkOperationsArray = QuarkOperationHelper.wrapOperationsWithTokenPayment({
+                quarkOperations: quarkOperationsArray,
+                actions: actionsArray,
+                payment: payment,
+                useQuotecall: false
+            });
+        }
     }
 
     /* ===== Helper functions ===== */
@@ -279,6 +291,25 @@ contract QuarkBuilderBase {
         for (uint256 i = 0; i < cometPositions.basePosition.accounts.length; ++i) {
             if (cometPositions.basePosition.accounts[i] == withdrawer) {
                 actualWithdrawAmount += cometPositions.basePosition.supplied[i];
+            }
+        }
+        return actualWithdrawAmount;
+    }
+
+    function morphoWithdrawMaxAmount(
+        Accounts.ChainAccounts[] memory chainAccountsList,
+        uint256 chainId,
+        string memory assetSymbol,
+        address withdrawer
+    ) internal pure returns (uint256) {
+        uint256 actualWithdrawAmount = 0;
+        Accounts.MorphoVaultPositions memory morphoVaultPositions = Accounts.findMorphoVaultPositions(
+            chainId, Accounts.findAssetPositions(assetSymbol, chainId, chainAccountsList).asset, chainAccountsList
+        );
+
+        for (uint256 i = 0; i < morphoVaultPositions.accounts.length; ++i) {
+            if (morphoVaultPositions.accounts[i] == withdrawer) {
+                actualWithdrawAmount += morphoVaultPositions.balances[i];
             }
         }
         return actualWithdrawAmount;
@@ -395,7 +426,6 @@ contract QuarkBuilderBase {
         Accounts.ChainAccounts[] chainAccountsList;
         uint256 targetChainId;
         address account;
-        uint256 supplementalPaymentTokenBalance;
         PaymentInfo.Payment payment;
         ActionIntent actionIntent;
     }
@@ -418,6 +448,8 @@ contract QuarkBuilderBase {
 
         string memory paymentTokenSymbol = args.actions[0].paymentTokenSymbol; // assumes all actions use the same payment token
         for (uint256 i = 0; i < args.actions.length; ++i) {
+            console.log("parsing action");
+
             Actions.Action memory action = args.actions[i];
 
             // Keep track of which chains have actions on them. This will be used to generate the final
@@ -426,218 +458,14 @@ contract QuarkBuilderBase {
                 List.addUint256(chainIdsInvolved, action.chainId);
             }
 
-            // Depending on the action type, update the `assetsInPerChain` and/or `assetsOutPerChain` maps
-            if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_BRIDGE)) {
-                Actions.BridgeActionContext memory bridgeActionContext =
-                    abi.decode(action.actionContext, (Actions.BridgeActionContext));
-                if (Strings.stringEqIgnoreCase(bridgeActionContext.assetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsInPerChain,
-                        abi.encode(bridgeActionContext.destinationChainId),
-                        bridgeActionContext.outputAmount
-                    );
-                    HashMap.addOrPutUint256(
-                        assetsOutPerChain, abi.encode(bridgeActionContext.chainId), bridgeActionContext.inputAmount
-                    );
-                }
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_BORROW)) {
-                Actions.BorrowActionContext memory borrowActionContext =
-                    abi.decode(action.actionContext, (Actions.BorrowActionContext));
-                if (Strings.stringEqIgnoreCase(borrowActionContext.assetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsInPerChain, abi.encode(borrowActionContext.chainId), borrowActionContext.amount
-                    );
-                }
-
-                for (uint256 j = 0; j < borrowActionContext.collateralAssetSymbols.length; ++j) {
-                    if (Strings.stringEqIgnoreCase(borrowActionContext.collateralAssetSymbols[j], paymentTokenSymbol)) {
-                        HashMap.addOrPutUint256(
-                            assetsOutPerChain,
-                            abi.encode(borrowActionContext.chainId),
-                            borrowActionContext.collateralAmounts[j]
-                        );
-                    }
-                }
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_MORPHO_BORROW)) {
-                Actions.MorphoBorrowActionContext memory borrowActionContext =
-                    abi.decode(action.actionContext, (Actions.MorphoBorrowActionContext));
-                if (Strings.stringEqIgnoreCase(borrowActionContext.assetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsInPerChain, abi.encode(borrowActionContext.chainId), borrowActionContext.amount
-                    );
-                }
-                if (Strings.stringEqIgnoreCase(borrowActionContext.collateralAssetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsOutPerChain, abi.encode(borrowActionContext.chainId), borrowActionContext.collateralAmount
-                    );
-                }
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_MORPHO_CLAIM_REWARDS)) {
-                // TODO: Treat rewards claimed as asset in?
-                continue;
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_MORPHO_REPAY)) {
-                Actions.MorphoRepayActionContext memory morphoRepayActionContext =
-                    abi.decode(action.actionContext, (Actions.MorphoRepayActionContext));
-                if (Strings.stringEqIgnoreCase(morphoRepayActionContext.assetSymbol, paymentTokenSymbol)) {
-                    uint256 repayAmount;
-                    if (morphoRepayActionContext.amount == type(uint256).max) {
-                        repayAmount = morphoRepayMaxAmount(
-                            args.chainAccountsList,
-                            morphoRepayActionContext.chainId,
-                            morphoRepayActionContext.token,
-                            morphoRepayActionContext.collateralToken,
-                            args.account
-                        );
-                    } else {
-                        repayAmount = morphoRepayActionContext.amount;
-                    }
-                    HashMap.addOrPutUint256(
-                        assetsOutPerChain, abi.encode(morphoRepayActionContext.chainId), repayAmount
-                    );
-                }
-                if (Strings.stringEqIgnoreCase(morphoRepayActionContext.collateralAssetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsInPerChain,
-                        abi.encode(morphoRepayActionContext.chainId),
-                        morphoRepayActionContext.collateralAmount
-                    );
-                }
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_REPAY)) {
-                Actions.RepayActionContext memory cometRepayActionContext =
-                    abi.decode(action.actionContext, (Actions.RepayActionContext));
-                if (Strings.stringEqIgnoreCase(cometRepayActionContext.assetSymbol, paymentTokenSymbol)) {
-                    uint256 repayAmount;
-                    if (cometRepayActionContext.amount == type(uint256).max) {
-                        repayAmount = cometRepayMaxAmount(
-                            args.chainAccountsList,
-                            cometRepayActionContext.chainId,
-                            cometRepayActionContext.comet,
-                            args.account
-                        );
-                    } else {
-                        repayAmount = cometRepayActionContext.amount;
-                    }
-                    HashMap.addOrPutUint256(assetsOutPerChain, abi.encode(cometRepayActionContext.chainId), repayAmount);
-                }
-
-                for (uint256 j = 0; j < cometRepayActionContext.collateralAssetSymbols.length; ++j) {
-                    if (
-                        Strings.stringEqIgnoreCase(
-                            cometRepayActionContext.collateralAssetSymbols[j], paymentTokenSymbol
-                        )
-                    ) {
-                        HashMap.addOrPutUint256(
-                            assetsInPerChain,
-                            abi.encode(cometRepayActionContext.chainId),
-                            cometRepayActionContext.collateralAmounts[j]
-                        );
-                    }
-                }
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_SUPPLY)) {
-                Actions.SupplyActionContext memory cometSupplyActionContext =
-                    abi.decode(action.actionContext, (Actions.SupplyActionContext));
-                if (Strings.stringEqIgnoreCase(cometSupplyActionContext.assetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsOutPerChain, abi.encode(cometSupplyActionContext.chainId), cometSupplyActionContext.amount
-                    );
-                }
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_MORPHO_VAULT_SUPPLY)) {
-                Actions.MorphoVaultSupplyActionContext memory morphoVaultSupplyActionContext =
-                    abi.decode(action.actionContext, (Actions.MorphoVaultSupplyActionContext));
-                if (Strings.stringEqIgnoreCase(morphoVaultSupplyActionContext.assetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsOutPerChain,
-                        abi.encode(morphoVaultSupplyActionContext.chainId),
-                        morphoVaultSupplyActionContext.amount
-                    );
-                }
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_SWAP)) {
-                Actions.SwapActionContext memory swapActionContext =
-                    abi.decode(action.actionContext, (Actions.SwapActionContext));
-                if (Strings.stringEqIgnoreCase(swapActionContext.inputAssetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsOutPerChain, abi.encode(swapActionContext.chainId), swapActionContext.inputAmount
-                    );
-                }
-                if (Strings.stringEqIgnoreCase(swapActionContext.outputAssetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsInPerChain, abi.encode(swapActionContext.chainId), swapActionContext.outputAmount
-                    );
-                }
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_RECURRING_SWAP)) {
-                Actions.RecurringSwapActionContext memory recurringSwapActionContext =
-                    abi.decode(action.actionContext, (Actions.RecurringSwapActionContext));
-                if (Strings.stringEqIgnoreCase(recurringSwapActionContext.inputAssetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsOutPerChain,
-                        abi.encode(recurringSwapActionContext.chainId),
-                        recurringSwapActionContext.inputAmount
-                    );
-                }
-                if (Strings.stringEqIgnoreCase(recurringSwapActionContext.outputAssetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsInPerChain,
-                        abi.encode(recurringSwapActionContext.chainId),
-                        recurringSwapActionContext.outputAmount
-                    );
-                }
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_TRANSFER)) {
-                Actions.TransferActionContext memory transferActionContext =
-                    abi.decode(action.actionContext, (Actions.TransferActionContext));
-                if (Strings.stringEqIgnoreCase(transferActionContext.assetSymbol, paymentTokenSymbol)) {
-                    HashMap.addOrPutUint256(
-                        assetsOutPerChain, abi.encode(transferActionContext.chainId), transferActionContext.amount
-                    );
-                }
-            } else if (
-                Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_UNWRAP)
-                    || Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_WRAP)
-            ) {
-                Actions.WrapOrUnwrapActionContext memory wrapOrUnwrapActionContext =
-                    abi.decode(action.actionContext, (Actions.WrapOrUnwrapActionContext));
-                if (Strings.stringEqIgnoreCase(wrapOrUnwrapActionContext.toAssetSymbol, paymentTokenSymbol)) {
-                    console.log("wrap  ", wrapOrUnwrapActionContext.toAssetSymbol, wrapOrUnwrapActionContext.amount);
-                    HashMap.addOrPutUint256(
-                        assetsInPerChain,
-                        abi.encode(wrapOrUnwrapActionContext.chainId),
-                        wrapOrUnwrapActionContext.amount
-                    );
-                }
-                if (Strings.stringEqIgnoreCase(wrapOrUnwrapActionContext.fromAssetSymbol, paymentTokenSymbol)) {
-                    console.log("unwrap  ", wrapOrUnwrapActionContext.fromAssetSymbol, wrapOrUnwrapActionContext.amount);
-                    HashMap.addOrPutUint256(
-                        assetsOutPerChain,
-                        abi.encode(wrapOrUnwrapActionContext.chainId),
-                        wrapOrUnwrapActionContext.amount
-                    );
-                }
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_WITHDRAW)) {
-                Actions.WithdrawActionContext memory withdrawActionContext =
-                    abi.decode(action.actionContext, (Actions.WithdrawActionContext));
-                if (Strings.stringEqIgnoreCase(withdrawActionContext.assetSymbol, paymentTokenSymbol)) {
-                    // If withdrawing max, we need to calculate the approximate amount that will be withdrawn
-                    uint256 withdrawAmount = withdrawActionContext.amount == type(uint256).max
-                        ? cometWithdrawMaxAmount(
-                            args.chainAccountsList,
-                            withdrawActionContext.chainId,
-                            withdrawActionContext.comet,
-                            args.actionIntent.actor
-                        )
-                        : withdrawActionContext.amount;
-                    console.log("Withdraw amount is ", withdrawAmount, withdrawActionContext.amount);
-                    HashMap.addOrPutUint256(assetsInPerChain, abi.encode(withdrawActionContext.chainId), withdrawAmount);
-                }
-            } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_MORPHO_VAULT_WITHDRAW)) {
-                Actions.MorphoVaultWithdraw memory withdrawActionContext =
-                    abi.decode(action.actionContext, (Actions.MorphoVaultWithdraw));
-                if (Strings.stringEqIgnoreCase(withdrawActionContext.assetSymbol, paymentTokenSymbol)) {
-                    // TODO: handle max (do we need to do it for supply and transfer as well?)
-                    HashMap.addOrPutUint256(
-                        assetsInPerChain, abi.encode(withdrawActionContext.chainId), withdrawActionContext.amount
-                    );
-                }
-            } else {
-                revert InvalidActionType();
-            }
+            trackAssetsInAndOut({
+                assetsInPerChain: assetsInPerChain,
+                assetsOutPerChain: assetsOutPerChain,
+                action: action,
+                actionIntent: args.actionIntent,
+                chainAccountsList: args.chainAccountsList,
+                account: args.account
+            });
         }
 
         for (uint256 i = 0; i < args.chainAccountsList.length; ++i) {
@@ -722,6 +550,291 @@ contract QuarkBuilderBase {
         //     PaymentInfo.totalCost(args.payment, List.toUint256Array(chainIdsInvolved)),
         //     Accounts.totalBalance(paymentTokenSymbol, args.chainAccountsList)
         // );
+    }
+
+    /**
+     * @dev Assert that there are sufficient payment tokens for a recurring transaction that uses Paycall
+     */
+    function assertSufficientPaymentTokensForPaycall(PaymentBalanceAssertionArgs memory args) internal pure {
+        // Tracks the payment assets that are leaving and entering each chain
+        HashMap.Map memory assetsInPerChain = HashMap.newMap();
+        HashMap.Map memory assetsOutPerChain = HashMap.newMap();
+
+        string memory paymentTokenSymbol = args.actions[0].paymentTokenSymbol; // assumes all actions use the same payment token
+        for (uint256 i = 0; i < args.actions.length; ++i) {
+            Actions.Action memory action = args.actions[i];
+
+            trackAssetsInAndOut({
+                assetsInPerChain: assetsInPerChain,
+                assetsOutPerChain: assetsOutPerChain,
+                action: action,
+                actionIntent: args.actionIntent,
+                chainAccountsList: args.chainAccountsList,
+                account: args.account
+            });
+        }
+
+        uint256 chainId = args.targetChainId;
+        uint256 maxCost = PaymentInfo.findMaxCost(args.payment, chainId);
+        Accounts.ChainAccounts memory chainAccount = Accounts.findChainAccounts(chainId, args.chainAccountsList);
+
+        Accounts.AssetPositions memory paymentAssetPositions =
+            Accounts.findAssetPositions(paymentTokenSymbol, chainAccount.assetPositionsList);
+        uint256 paymentAssetBalanceOnChain = Accounts.sumBalances(paymentAssetPositions);
+
+        if (
+            paymentAssetBalanceOnChain + HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0)
+                < HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0)
+        ) {
+            // Note: This should be unreachable. Something is very wrong if this hits!
+            revert BalanceNotRight(
+                paymentAssetBalanceOnChain,
+                HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0),
+                HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0)
+            );
+        }
+
+        uint256 netPaymentAssetBalanceOnChain = paymentAssetBalanceOnChain
+            + HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0)
+            - HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0);
+        if (netPaymentAssetBalanceOnChain < maxCost) {
+            revert UnableToConstructQuotePay(paymentTokenSymbol);
+        }
+    }
+
+    /**
+     * @dev Tracks how much of each asset is entering and leaving an account on each chain for an action
+     */
+    function trackAssetsInAndOut(
+        HashMap.Map memory assetsInPerChain,
+        HashMap.Map memory assetsOutPerChain,
+        Actions.Action memory action,
+        ActionIntent memory actionIntent,
+        Accounts.ChainAccounts[] memory chainAccountsList,
+        address account
+    ) internal pure {
+        string memory paymentTokenSymbol = action.paymentTokenSymbol;
+
+        // Depending on the action type, update the `assetsInPerChain` and/or `assetsOutPerChain` maps
+        if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_BRIDGE)) {
+            Actions.BridgeActionContext memory bridgeActionContext =
+                abi.decode(action.actionContext, (Actions.BridgeActionContext));
+            if (Strings.stringEqIgnoreCase(bridgeActionContext.assetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsInPerChain,
+                    abi.encode(bridgeActionContext.destinationChainId),
+                    bridgeActionContext.outputAmount
+                );
+                HashMap.addOrPutUint256(
+                    assetsOutPerChain, abi.encode(bridgeActionContext.chainId), bridgeActionContext.inputAmount
+                );
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_BORROW)) {
+            Actions.BorrowActionContext memory borrowActionContext =
+                abi.decode(action.actionContext, (Actions.BorrowActionContext));
+            if (Strings.stringEqIgnoreCase(borrowActionContext.assetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsInPerChain, abi.encode(borrowActionContext.chainId), borrowActionContext.amount
+                );
+            }
+
+            for (uint256 j = 0; j < borrowActionContext.collateralAssetSymbols.length; ++j) {
+                if (Strings.stringEqIgnoreCase(borrowActionContext.collateralAssetSymbols[j], paymentTokenSymbol)) {
+                    HashMap.addOrPutUint256(
+                        assetsOutPerChain,
+                        abi.encode(borrowActionContext.chainId),
+                        borrowActionContext.collateralAmounts[j]
+                    );
+                }
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_MORPHO_BORROW)) {
+            Actions.MorphoBorrowActionContext memory borrowActionContext =
+                abi.decode(action.actionContext, (Actions.MorphoBorrowActionContext));
+            if (Strings.stringEqIgnoreCase(borrowActionContext.assetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsInPerChain, abi.encode(borrowActionContext.chainId), borrowActionContext.amount
+                );
+            }
+            if (Strings.stringEqIgnoreCase(borrowActionContext.collateralAssetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsOutPerChain, abi.encode(borrowActionContext.chainId), borrowActionContext.collateralAmount
+                );
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_CLAIM_REWARDS)) {
+            Actions.ClaimRewardsActionContext memory claimRewardActionContext =
+                abi.decode(action.actionContext, (Actions.ClaimRewardsActionContext));
+            if (Strings.stringEqIgnoreCase(claimRewardActionContext.assetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsInPerChain, abi.encode(claimRewardActionContext.chainId), claimRewardActionContext.amount
+                );
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_MORPHO_CLAIM_REWARDS)) {
+            Actions.MorphoClaimRewardsActionContext memory claimRewardActionContext =
+                abi.decode(action.actionContext, (Actions.MorphoClaimRewardsActionContext));
+            for (uint256 j = 0; j < claimRewardActionContext.assetSymbols.length; ++j) {
+                if (Strings.stringEqIgnoreCase(claimRewardActionContext.assetSymbols[j], paymentTokenSymbol)) {
+                    HashMap.addOrPutUint256(
+                        assetsInPerChain,
+                        abi.encode(claimRewardActionContext.chainId),
+                        claimRewardActionContext.amounts[j]
+                    );
+                }
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_MORPHO_REPAY)) {
+            Actions.MorphoRepayActionContext memory morphoRepayActionContext =
+                abi.decode(action.actionContext, (Actions.MorphoRepayActionContext));
+            if (Strings.stringEqIgnoreCase(morphoRepayActionContext.assetSymbol, paymentTokenSymbol)) {
+                uint256 repayAmount;
+                if (morphoRepayActionContext.amount == type(uint256).max) {
+                    repayAmount = morphoRepayMaxAmount(
+                        chainAccountsList,
+                        morphoRepayActionContext.chainId,
+                        morphoRepayActionContext.token,
+                        morphoRepayActionContext.collateralToken,
+                        account
+                    );
+                } else {
+                    repayAmount = morphoRepayActionContext.amount;
+                }
+                HashMap.addOrPutUint256(assetsOutPerChain, abi.encode(morphoRepayActionContext.chainId), repayAmount);
+            }
+            if (Strings.stringEqIgnoreCase(morphoRepayActionContext.collateralAssetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsInPerChain,
+                    abi.encode(morphoRepayActionContext.chainId),
+                    morphoRepayActionContext.collateralAmount
+                );
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_REPAY)) {
+            Actions.RepayActionContext memory cometRepayActionContext =
+                abi.decode(action.actionContext, (Actions.RepayActionContext));
+            if (Strings.stringEqIgnoreCase(cometRepayActionContext.assetSymbol, paymentTokenSymbol)) {
+                uint256 repayAmount;
+                if (cometRepayActionContext.amount == type(uint256).max) {
+                    repayAmount = cometRepayMaxAmount(
+                        chainAccountsList, cometRepayActionContext.chainId, cometRepayActionContext.comet, account
+                    );
+                } else {
+                    repayAmount = cometRepayActionContext.amount;
+                }
+                HashMap.addOrPutUint256(assetsOutPerChain, abi.encode(cometRepayActionContext.chainId), repayAmount);
+            }
+
+            for (uint256 j = 0; j < cometRepayActionContext.collateralAssetSymbols.length; ++j) {
+                if (Strings.stringEqIgnoreCase(cometRepayActionContext.collateralAssetSymbols[j], paymentTokenSymbol)) {
+                    HashMap.addOrPutUint256(
+                        assetsInPerChain,
+                        abi.encode(cometRepayActionContext.chainId),
+                        cometRepayActionContext.collateralAmounts[j]
+                    );
+                }
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_SUPPLY)) {
+            Actions.SupplyActionContext memory cometSupplyActionContext =
+                abi.decode(action.actionContext, (Actions.SupplyActionContext));
+            if (Strings.stringEqIgnoreCase(cometSupplyActionContext.assetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsOutPerChain, abi.encode(cometSupplyActionContext.chainId), cometSupplyActionContext.amount
+                );
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_MORPHO_VAULT_SUPPLY)) {
+            Actions.MorphoVaultSupplyActionContext memory morphoVaultSupplyActionContext =
+                abi.decode(action.actionContext, (Actions.MorphoVaultSupplyActionContext));
+            if (Strings.stringEqIgnoreCase(morphoVaultSupplyActionContext.assetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsOutPerChain,
+                    abi.encode(morphoVaultSupplyActionContext.chainId),
+                    morphoVaultSupplyActionContext.amount
+                );
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_SWAP)) {
+            Actions.SwapActionContext memory swapActionContext =
+                abi.decode(action.actionContext, (Actions.SwapActionContext));
+            if (Strings.stringEqIgnoreCase(swapActionContext.inputAssetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsOutPerChain, abi.encode(swapActionContext.chainId), swapActionContext.inputAmount
+                );
+            }
+            if (Strings.stringEqIgnoreCase(swapActionContext.outputAssetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsInPerChain, abi.encode(swapActionContext.chainId), swapActionContext.outputAmount
+                );
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_RECURRING_SWAP)) {
+            Actions.RecurringSwapActionContext memory recurringSwapActionContext =
+                abi.decode(action.actionContext, (Actions.RecurringSwapActionContext));
+            if (Strings.stringEqIgnoreCase(recurringSwapActionContext.inputAssetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsOutPerChain,
+                    abi.encode(recurringSwapActionContext.chainId),
+                    recurringSwapActionContext.inputAmount
+                );
+            }
+            if (Strings.stringEqIgnoreCase(recurringSwapActionContext.outputAssetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsInPerChain,
+                    abi.encode(recurringSwapActionContext.chainId),
+                    recurringSwapActionContext.outputAmount
+                );
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_TRANSFER)) {
+            Actions.TransferActionContext memory transferActionContext =
+                abi.decode(action.actionContext, (Actions.TransferActionContext));
+            if (Strings.stringEqIgnoreCase(transferActionContext.assetSymbol, paymentTokenSymbol)) {
+                HashMap.addOrPutUint256(
+                    assetsOutPerChain, abi.encode(transferActionContext.chainId), transferActionContext.amount
+                );
+            }
+        } else if (
+            Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_UNWRAP)
+                || Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_WRAP)
+        ) {
+            Actions.WrapOrUnwrapActionContext memory wrapOrUnwrapActionContext =
+                abi.decode(action.actionContext, (Actions.WrapOrUnwrapActionContext));
+            if (Strings.stringEqIgnoreCase(wrapOrUnwrapActionContext.toAssetSymbol, paymentTokenSymbol)) {
+                console.log("wrap  ", wrapOrUnwrapActionContext.toAssetSymbol, wrapOrUnwrapActionContext.amount);
+                HashMap.addOrPutUint256(
+                    assetsInPerChain, abi.encode(wrapOrUnwrapActionContext.chainId), wrapOrUnwrapActionContext.amount
+                );
+            }
+            if (Strings.stringEqIgnoreCase(wrapOrUnwrapActionContext.fromAssetSymbol, paymentTokenSymbol)) {
+                console.log("unwrap  ", wrapOrUnwrapActionContext.fromAssetSymbol, wrapOrUnwrapActionContext.amount);
+                HashMap.addOrPutUint256(
+                    assetsOutPerChain, abi.encode(wrapOrUnwrapActionContext.chainId), wrapOrUnwrapActionContext.amount
+                );
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_WITHDRAW)) {
+            Actions.WithdrawActionContext memory withdrawActionContext =
+                abi.decode(action.actionContext, (Actions.WithdrawActionContext));
+            if (Strings.stringEqIgnoreCase(withdrawActionContext.assetSymbol, paymentTokenSymbol)) {
+                // If withdrawing max, we need to calculate the approximate amount that will be withdrawn
+                uint256 withdrawAmount = withdrawActionContext.amount == type(uint256).max
+                    ? cometWithdrawMaxAmount(
+                        chainAccountsList, withdrawActionContext.chainId, withdrawActionContext.comet, actionIntent.actor
+                    )
+                    : withdrawActionContext.amount;
+                console.log("Withdraw amount is ", withdrawAmount, withdrawActionContext.amount);
+                HashMap.addOrPutUint256(assetsInPerChain, abi.encode(withdrawActionContext.chainId), withdrawAmount);
+            }
+        } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_MORPHO_VAULT_WITHDRAW)) {
+            Actions.MorphoVaultWithdrawActionContext memory withdrawActionContext =
+                abi.decode(action.actionContext, (Actions.MorphoVaultWithdrawActionContext));
+            if (Strings.stringEqIgnoreCase(withdrawActionContext.assetSymbol, paymentTokenSymbol)) {
+                // If withdrawing max, we need to calculate the approximate amount that will be withdrawn
+                uint256 withdrawAmount = withdrawActionContext.amount == type(uint256).max
+                    ? morphoWithdrawMaxAmount(
+                        chainAccountsList,
+                        withdrawActionContext.chainId,
+                        withdrawActionContext.assetSymbol,
+                        actionIntent.actor
+                    )
+                    : withdrawActionContext.amount;
+                console.log("Withdraw amount is ", withdrawAmount, withdrawActionContext.amount);
+                HashMap.addOrPutUint256(assetsInPerChain, abi.encode(withdrawActionContext.chainId), withdrawAmount);
+            }
+        } else {
+            revert InvalidActionType();
+        }
     }
 
     function getWrapperCounterpartBalance(
