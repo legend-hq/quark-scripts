@@ -11,6 +11,7 @@ import {MorphoInfo} from "src/builder/MorphoInfo.sol";
 import {Strings} from "src/builder/Strings.sol";
 import {PaycallWrapper} from "src/builder/PaycallWrapper.sol";
 import {QuotecallWrapper} from "src/builder/QuotecallWrapper.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 import {PaymentInfo} from "src/builder/PaymentInfo.sol";
 import {TokenWrapper} from "src/builder/TokenWrapper.sol";
 import {QuarkOperationHelper} from "src/builder/QuarkOperationHelper.sol";
@@ -26,13 +27,17 @@ contract TransferActionsBuilder is QuarkBuilderBase {
         address recipient;
         uint256 blockTimestamp;
         bool preferAcross;
+        string paymentAssetSymbol;
     }
 
     function transfer(
         TransferIntent memory transferIntent,
         Accounts.ChainAccounts[] memory chainAccountsList,
-        PaymentInfo.Payment memory payment
+        Quotes.Quote memory quote
     ) external pure returns (BuilderResult memory) {
+        PaymentInfo.Payment memory payment =
+            Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, transferIntent.paymentAssetSymbol);
+
         // If the action is paid for with tokens, filter out any chain accounts that do not have corresponding payment information
         if (payment.isToken) {
             chainAccountsList = Accounts.findChainAccountsWithPaymentInfo(chainAccountsList, payment);

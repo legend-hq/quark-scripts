@@ -18,6 +18,7 @@ import {PaymentInfo} from "src/builder/PaymentInfo.sol";
 import {QuarkBuilder} from "src/builder/QuarkBuilder.sol";
 import {QuarkBuilderBase} from "src/builder/QuarkBuilderBase.sol";
 import {QuotePay} from "src/QuotePay.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 
 contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
     function transferUsdc_(uint256 chainId, uint256 amount, address recipient, uint256 blockTimestamp)
@@ -84,7 +85,8 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
             amount: amount,
             assetSymbol: assetSymbol,
             blockTimestamp: blockTimestamp,
-            preferAcross: false
+            preferAcross: false,
+            paymentAssetSymbol: "USDC"
         });
     }
 
@@ -95,7 +97,8 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         address sender,
         address recipient,
         uint256 blockTimestamp,
-        bool preferAcross
+        bool preferAcross,
+        string memory paymentAssetSymbol
     ) internal pure returns (TransferActionsBuilder.TransferIntent memory) {
         return TransferActionsBuilder.TransferIntent({
             chainId: chainId,
@@ -104,39 +107,46 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
             amount: amount,
             assetSymbol: assetSymbol,
             blockTimestamp: blockTimestamp,
-            preferAcross: preferAcross
+            preferAcross: preferAcross,
+            paymentAssetSymbol: paymentAssetSymbol
         });
     }
 
     function testInsufficientFunds() public {
+        TransferActionsBuilder.TransferIntent memory intent = transferUsdc_(1, 10e6, address(0xc0b), BLOCK_TIMESTAMP); // transfer 10 USDC on chain 1 to 0xc0b
+        intent.paymentAssetSymbol = "USD";
+
         QuarkBuilder builder = new QuarkBuilder();
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 10e6, 0e6));
         builder.transfer(
-            transferUsdc_(1, 10e6, address(0xc0b), BLOCK_TIMESTAMP), // transfer 10 USDC on chain 1 to 0xc0b
+            intent, // transfer 10 USDC on chain 1 to 0xc0b
             chainAccountsList_(0e6), // but we are holding 0 USDC in total across 1, 8453
-            paymentUsd_()
+            quote_()
         );
     }
 
     function testMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "USDC"));
         builder.transfer(
             transferUsdc_(1, 1e6, address(0xc0b), BLOCK_TIMESTAMP), // transfer 1 USDC on chain 1 to 0xc0b
             chainAccountsList_(2e6), // holding 2 USDC in total across 1, 8453
-            paymentUsdc_(maxCosts_(1, 1_000e6)) // but costs 1,000 USDC
+            quote_(1, 1_000e8) // but costs $1,000
         );
     }
 
     function testFundsOnUnbridgeableChains() public {
+        TransferActionsBuilder.TransferIntent memory intent = transferUsdc_(7777, 2e6, address(0xc0b), BLOCK_TIMESTAMP); // transfer 2 USDC on chain 7777 to 0xc0b
+        intent.paymentAssetSymbol = "USD";
+
         QuarkBuilder builder = new QuarkBuilder();
         // FundsUnavailable("USDC", 2e6, 0e6): Requested 2e6, Available 0e6
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 2e6, 0e6));
         builder.transfer(
             // there is no bridge to chain 7777, so we cannot get to our funds
-            transferUsdc_(7777, 2e6, address(0xc0b), BLOCK_TIMESTAMP), // transfer 2 USDC on chain 7777 to 0xc0b
+            intent,
             chainAccountsList_(3e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
     }
 
@@ -147,7 +157,7 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         builder.transfer(
             transferUsdc_(1, 105e6, address(0xc0b), BLOCK_TIMESTAMP), // transfer 100 USDC on chain 1 to 0xc0b
             chainAccountsList_(200e6), // holding 200 USDC in total across 1, 8453
-            paymentUsdc_(maxCosts_(1, 3e6)) // but costs 3 USDC
+            quote_(1, 3e8)
         );
     }
 
@@ -155,23 +165,26 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
         // User has enough to transfer, but not enough for the QuotePay because no quote is given on chain 8453 and all
         // the funds are used on chain 1 for the transfer
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "USDC"));
         builder.transfer(
             transferUsdc_(1, 100e6, address(0xc0b), BLOCK_TIMESTAMP), // transfer 100 USDC on chain 1 to 0xc0b
             chainAccountsList_(200e6), // holding 200 USDC in total across 1, 8453
-            paymentUsdc_(maxCosts_(1, 3e6)) // but costs 3 USDC
+            quote_(1, 3e8) // but costs $3
         );
     }
 
     function testSimpleLocalTransferSucceeds() public {
+        TransferActionsBuilder.TransferIntent memory intent = transferUsdc_(1, 1e6, address(0xceecee), BLOCK_TIMESTAMP); // transfer 1 USDC on chain 1 to 0xceecee
+        intent.paymentAssetSymbol = "USD";
+
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.transfer(
-            transferUsdc_(1, 1e6, address(0xceecee), BLOCK_TIMESTAMP), // transfer 1 USDC on chain 1 to 0xceecee
+            intent,
             chainAccountsList_(3e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -247,13 +260,15 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
                 amount: 5e6,
                 sender: address(0xb0b),
                 recipient: address(0xceecee),
-                blockTimestamp: BLOCK_TIMESTAMP
+                blockTimestamp: BLOCK_TIMESTAMP,
+                preferAcross: false,
+                paymentAssetSymbol: "USD"
             }), // transfer 5 USDC on chain 8453 to 0xceecee
             chainAccountsList_(6e6), // holding 6 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 2, "two operations");
@@ -386,11 +401,17 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
 
     // DONE AND PASSES!
     function testSimpleBridgeTransferWithQuotePaySucceeds() public {
-        QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e5});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 1e5});
+        Quotes.NetworkOperationFee memory networkOperationFeeBase =
+            Quotes.NetworkOperationFee({chainId: 8453, opType: Quotes.OP_TYPE_BASELINE, price: 0.1e8});
 
+        Quotes.NetworkOperationFee memory networkOperationFeeMainnet =
+            Quotes.NetworkOperationFee({chainId: 1, opType: Quotes.OP_TYPE_BASELINE, price: 0.5e8});
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] = networkOperationFeeBase;
+        networkOperationFees[1] = networkOperationFeeMainnet;
+
+        QuarkBuilder builder = new QuarkBuilder();
         // Note: There are 3e6 USDC on each chain, so the Builder should attempt to bridge 2 USDC to chain 8453.
         //       It would then pay for the quotes for chains 1 and 8453 (total of 6e5) on chain 1.
         QuarkBuilder.BuilderResult memory result = builder.transfer(
@@ -403,14 +424,14 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
                 blockTimestamp: BLOCK_TIMESTAMP
             }), // transfer 5 USDC on chain 8453 to 0xceecee
             chainAccountsList_(6e6), // holding 6 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
         address transferActionsAddress = CodeJarHelper.getCodeAddress(type(TransferActions).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 2, "two operations");
@@ -517,8 +538,6 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
 
     function testSimpleLocalTransferMax() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 1e5});
         Accounts.ChainAccounts[] memory chainAccountsList = new Accounts.ChainAccounts[](1);
         chainAccountsList[0] = Accounts.ChainAccounts({
             chainId: 1,
@@ -532,14 +551,14 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         QuarkBuilder.BuilderResult memory result = builder.transfer(
             transferUsdc_(1, type(uint256).max, address(0xceecee), BLOCK_TIMESTAMP), // transfer max
             chainAccountsList,
-            paymentUsdc_(maxCosts)
+            quote_(1, 0.1e8)
         );
 
         address transferActionsAddress = CodeJarHelper.getCodeAddress(type(TransferActions).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -604,9 +623,14 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
 
     function testSimpleBridgeTransferMax() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.1e6});
+        Quotes.NetworkOperationFee memory networkOperationFeeBase =
+            Quotes.NetworkOperationFee({chainId: 8453, opType: Quotes.OP_TYPE_BASELINE, price: 0.1e8});
+
+        Quotes.NetworkOperationFee memory networkOperationFeeMainnet =
+            Quotes.NetworkOperationFee({chainId: 1, opType: Quotes.OP_TYPE_BASELINE, price: 0.5e8});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] = networkOperationFeeBase;
+        networkOperationFees[1] = networkOperationFeeMainnet;
         Accounts.ChainAccounts[] memory chainAccountsList = new Accounts.ChainAccounts[](2);
         chainAccountsList[0] = Accounts.ChainAccounts({
             chainId: 1,
@@ -636,7 +660,7 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
                 blockTimestamp: BLOCK_TIMESTAMP
             }), // transfer max USDC on chain 8453 to 0xceecee
             chainAccountsList, // holding 8 USDC on chains 1, and 4 USDC on 8453
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);
@@ -644,7 +668,7 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
         address transferActionsAddress = CodeJarHelper.getCodeAddress(type(TransferActions).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 2, "two operations");
@@ -753,10 +777,16 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
 
     function testBridgeTransferMaxFundUnavailableError() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](3);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.1e6});
-        maxCosts[2] = PaymentInfo.PaymentMaxCost({chainId: 7777, amount: 0.1e6}); // Random L2 with no bridge support
+        Quotes.NetworkOperationFee memory networkOperationFeeRandom =
+            Quotes.NetworkOperationFee({chainId: 7777, opType: Quotes.OP_TYPE_BASELINE, price: 0.1e8});
+        Quotes.NetworkOperationFee memory networkOperationFeeBase =
+            Quotes.NetworkOperationFee({chainId: 8453, opType: Quotes.OP_TYPE_BASELINE, price: 0.1e8});
+        Quotes.NetworkOperationFee memory networkOperationFeeMainnet =
+            Quotes.NetworkOperationFee({chainId: 1, opType: Quotes.OP_TYPE_BASELINE, price: 0.5e8});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](3);
+        networkOperationFees[0] = networkOperationFeeBase;
+        networkOperationFees[1] = networkOperationFeeMainnet;
+        networkOperationFees[2] = networkOperationFeeRandom;
         Accounts.ChainAccounts[] memory chainAccountsList = new Accounts.ChainAccounts[](3);
         chainAccountsList[0] = Accounts.ChainAccounts({
             chainId: 1,
@@ -792,15 +822,12 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         builder.transfer(
             transferUsdc_(8453, type(uint256).max, address(0xb0b), address(0xceecee), BLOCK_TIMESTAMP), // transfer max USDC on chain 8453 to 0xceecee
             chainAccountsList, // holding 8 USDC on chains 1, 4 USDC on 8453, 5 USDC on 7777
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
     }
 
     function testTransferIgnoresChainIfMaxCostIsNotSpecified() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.1e6});
-
         // Note: There are 3e6 USDC on each chain, so the Builder should attempt to bridge 2 USDC to chain 8453.
         // However, max cost is not specified for chain 1, so the Builder will ignore the chain and revert because
         // there will be insufficient funds for the transfer.
@@ -810,7 +837,7 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         builder.transfer(
             transferUsdc_(8453, 5e6, address(0xceecee), BLOCK_TIMESTAMP), // transfer 5 USDC on chain 8453 to 0xceecee
             chainAccountsList_(6e6), // holding 6 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
+            quote_(8453, 0.1e8)
         );
     }
 
@@ -851,17 +878,19 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
             morphoVaultPositions: emptyMorphoVaultPositions_()
         });
 
+        TransferActionsBuilder.TransferIntent memory intent =
+            transferEth_(1, 1.5e18, address(0xceecee), BLOCK_TIMESTAMP);
+        intent.paymentAssetSymbol = "USD";
+
         // Transfer 1.5 ETH to 0xceecee on chain 1
         // Should unwrap up to 1.5 WETH to ETH to cover the amount (0.5 WETH will actually be unwrapped)
-        QuarkBuilder.BuilderResult memory result = builder.transfer(
-            transferEth_(1, 1.5e18, address(0xceecee), BLOCK_TIMESTAMP), chainAccountsList, paymentUsd_()
-        );
+        QuarkBuilder.BuilderResult memory result = builder.transfer(intent, chainAccountsList, quote_());
 
         address transferActionsAddress = CodeJarHelper.getCodeAddress(type(TransferActions).creationCode);
         address wrapperActionsAddress = CodeJarHelper.getCodeAddress(type(WrapperActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one merged operation");
@@ -922,8 +951,6 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
     function testTransferWithAutoUnwrappingWithQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
         address account = address(0xa11ce);
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
         Accounts.ChainAccounts[] memory chainAccountsList = new Accounts.ChainAccounts[](1);
         // Holding 10 USDC, 1ETH, and 1WETH on chain 1
         Accounts.AssetPositions[] memory assetPositionsList = new Accounts.AssetPositions[](3);
@@ -961,7 +988,7 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         // Transfer 1.5 ETH to 0xceecee on chain 1
         // Should unwrap up to 1.5 WETH to ETH to cover the amount (0.5 WETH will actually be unwrapped)
         QuarkBuilder.BuilderResult memory result = builder.transfer(
-            transferEth_(1, 1.5e18, address(0xceecee), BLOCK_TIMESTAMP), chainAccountsList, paymentUsdc_(maxCosts)
+            transferEth_(1, 1.5e18, address(0xceecee), BLOCK_TIMESTAMP), chainAccountsList, quote_(1, 0.1e8)
         );
 
         address transferActionsAddress = CodeJarHelper.getCodeAddress(type(TransferActions).creationCode);
@@ -969,7 +996,7 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one merged operation");
@@ -1032,8 +1059,6 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
     function testTransferMaxWithAutoUnwrapping() public {
         QuarkBuilder builder = new QuarkBuilder();
         address account = address(0xa11ce);
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
         Accounts.ChainAccounts[] memory chainAccountsList = new Accounts.ChainAccounts[](1);
         // Holding 10 USDC, 1ETH, and 1WETH on chain 1
         Accounts.AssetPositions[] memory assetPositionsList = new Accounts.AssetPositions[](3);
@@ -1071,9 +1096,7 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         // Transfer max (2) ETH to 0xceecee on chain 1
         // Should unwrap up to 2 WETH to ETH to cover the amount (1 WETH will actually be unwrapped)
         QuarkBuilder.BuilderResult memory result = builder.transfer(
-            transferEth_(1, type(uint256).max, address(0xceecee), BLOCK_TIMESTAMP),
-            chainAccountsList,
-            paymentUsdc_(maxCosts)
+            transferEth_(1, type(uint256).max, address(0xceecee), BLOCK_TIMESTAMP), chainAccountsList, quote_(1, 0.1e8)
         );
 
         address transferActionsAddress = CodeJarHelper.getCodeAddress(type(TransferActions).creationCode);
@@ -1081,7 +1104,7 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one merged operation");
@@ -1144,8 +1167,6 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
     function testTransferWithAutoWrapping() public {
         QuarkBuilder builder = new QuarkBuilder();
         address account = address(0xa11ce);
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 1e5});
         Accounts.ChainAccounts[] memory chainAccountsList = new Accounts.ChainAccounts[](1);
         // Holding 10 USDC, 1ETH, and 1WETH on chain 1
         Accounts.AssetPositions[] memory assetPositionsList = new Accounts.AssetPositions[](3);
@@ -1180,17 +1201,19 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
             morphoVaultPositions: emptyMorphoVaultPositions_()
         });
 
+        TransferActionsBuilder.TransferIntent memory intent =
+            transferWeth_(1, 1.75e18, address(0xceecee), BLOCK_TIMESTAMP);
+        intent.paymentAssetSymbol = "USD";
+
         // Transfer 1.5ETH to 0xceecee on chain 1
         // Should able to have auto unwrapping 0.5 WETH to ETH to cover the amount
-        QuarkBuilder.BuilderResult memory result = builder.transfer(
-            transferWeth_(1, 1.75e18, address(0xceecee), BLOCK_TIMESTAMP), chainAccountsList, paymentUsd_()
-        );
+        QuarkBuilder.BuilderResult memory result = builder.transfer(intent, chainAccountsList, quote_());
 
         address transferActionsAddress = CodeJarHelper.getCodeAddress(type(TransferActions).creationCode);
         address wrapperActionsAddress = CodeJarHelper.getCodeAddress(type(WrapperActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one merged operation");
