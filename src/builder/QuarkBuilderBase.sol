@@ -119,7 +119,7 @@ contract QuarkBuilderBase {
 
         for (uint256 i = 0; i < actionIntent.assetSymbolOuts.length; ++i) {
             string memory assetSymbolOut = actionIntent.assetSymbolOuts[i];
-            // Asser that there are enough of the intent token to complete the action
+            // Assert that there are enough of the intent token to complete the action
             assertFundsAvailable(actionIntent.chainId, assetSymbolOut, actionIntent.amountOuts[i], chainAccountsList);
             // Check if the assetSymbolOut is the same as the payment token
             if (Strings.stringEqIgnoreCase(assetSymbolOut, payment.currency)) {
