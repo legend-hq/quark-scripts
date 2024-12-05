@@ -149,7 +149,6 @@ contract QuarkBuilderBase {
                     HashMap.addOrPutUint256(assetsBridged, abi.encode(assetSymbolOut), amountNeededOnDst);
 
                     for (uint256 j = 0; j < bridgeQuarkOperations.length; ++j) {
-                        console.log("finished constructing bridge");
                         List.addQuarkOperation(quarkOperations, bridgeQuarkOperations[j]);
                         List.addAction(actions, bridgeActions[j]);
                     }
@@ -195,18 +194,12 @@ contract QuarkBuilderBase {
             }
         }
 
-        console.log("finished constructing wraps");
-
         // Insert action and operation that will be wrapped with this
         List.addAction(actions, action);
         List.addQuarkOperation(quarkOperations, actionQuarkOperation);
 
-        console.log("added intent action to actions");
-
         // Generate a QuotePay operation if the payment method is with tokens and the action is non-recurring
         if (payment.isToken && !Actions.isRecurringAction(action)) {
-            console.log("start generating quote pay");
-
             (IQuarkWallet.QuarkOperation memory quotePayOperation, Actions.Action memory quotePayAction) =
             generateQuotePayOperation(
                 PaymentBalanceAssertionArgs({
@@ -221,8 +214,6 @@ contract QuarkBuilderBase {
 
             List.addAction(actions, quotePayAction);
             List.addQuarkOperation(quarkOperations, quotePayOperation);
-
-            console.log("added quotepay to actions");
         }
 
         // Convert to array
@@ -407,7 +398,6 @@ contract QuarkBuilderBase {
                     chainAccountsList: chainAccountsList,
                     assetSymbol: counterpartSymbol,
                     // Note: The wrapper logic should only "wrap all" or "wrap up to" the amount needed
-                    // TODO: should just be amount needed, but we need to know later on how much was likel entering/leaving system
                     amountNeeded: amountNeeded,
                     balanceOnChain: assetBalanceOnChain,
                     chainId: chainId,
@@ -417,7 +407,6 @@ contract QuarkBuilderBase {
                 payment,
                 useQuotecall
             );
-            console.log("wrapping up to ", amountNeeded, assetBalanceOnChain);
             List.addQuarkOperation(quarkOperations, wrapOrUnwrapOperation);
             List.addAction(actions, wrapOrUnwrapAction);
         }
@@ -450,8 +439,6 @@ contract QuarkBuilderBase {
 
         string memory paymentTokenSymbol = args.actions[0].paymentTokenSymbol; // assumes all actions use the same payment token
         for (uint256 i = 0; i < args.actions.length; ++i) {
-            console.log("parsing action");
-
             Actions.Action memory action = args.actions[i];
 
             // Keep track of which chains have actions on them. This will be used to generate the final
@@ -480,8 +467,6 @@ contract QuarkBuilderBase {
                 quoteAmount += PaymentInfo.findMaxCost(args.payment, chainId);
             }
 
-            console.log("quote amount is ", quoteAmount);
-
             // Calculate the net payment balance on this chain
             // TODO: Need to be modified when supporting multiple accounts per chain, since this currently assumes all assets are in one account.
             //       Will need a 2D map for assetsIn/Out to map from chainId -> account
@@ -498,8 +483,6 @@ contract QuarkBuilderBase {
                 }
             }
 
-            console.log("payer is ", payer);
-
             if (
                 paymentAssetBalanceOnChain + HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0)
                     < HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0)
@@ -511,25 +494,15 @@ contract QuarkBuilderBase {
                     HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0)
                 );
             }
-            console.log("post-check");
 
             uint256 netPaymentAssetBalanceOnChain = paymentAssetBalanceOnChain
                 + HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0)
                 - HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0);
 
-            console.log(
-                "assets in and out ",
-                HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0),
-                HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0)
-            );
-            console.log("checking condition", netPaymentAssetBalanceOnChain, quoteAmount);
-
             // Skip if there is not enough net payment balance on this chain
             if (netPaymentAssetBalanceOnChain < quoteAmount) {
                 continue;
             }
-
-            console.log("constructing quote pay");
 
             return Actions.quotePay(
                 Actions.QuotePayInfo({
@@ -631,7 +604,8 @@ contract QuarkBuilderBase {
     }
 
     /**
-     * @dev Tracks how much of each asset is entering and leaving an account on each chain for an action
+     * @dev Tracks how much of each asset is entering and leaving an account on each chain for an action.
+     *      This function writes the amounts directly into the two HashMaps (`assetsInPerChain` and `assetsOutPerChain`)
      */
     function trackAssetsInAndOut(
         HashMap.Map memory assetsInPerChain,
@@ -820,13 +794,11 @@ contract QuarkBuilderBase {
             Actions.WrapOrUnwrapActionContext memory wrapOrUnwrapActionContext =
                 abi.decode(action.actionContext, (Actions.WrapOrUnwrapActionContext));
             if (Strings.stringEqIgnoreCase(wrapOrUnwrapActionContext.toAssetSymbol, paymentTokenSymbol)) {
-                console.log("wrap  ", wrapOrUnwrapActionContext.toAssetSymbol, wrapOrUnwrapActionContext.amount);
                 HashMap.addOrPutUint256(
                     assetsInPerChain, abi.encode(wrapOrUnwrapActionContext.chainId), wrapOrUnwrapActionContext.amount
                 );
             }
             if (Strings.stringEqIgnoreCase(wrapOrUnwrapActionContext.fromAssetSymbol, paymentTokenSymbol)) {
-                console.log("unwrap  ", wrapOrUnwrapActionContext.fromAssetSymbol, wrapOrUnwrapActionContext.amount);
                 HashMap.addOrPutUint256(
                     assetsOutPerChain, abi.encode(wrapOrUnwrapActionContext.chainId), wrapOrUnwrapActionContext.amount
                 );
@@ -841,7 +813,6 @@ contract QuarkBuilderBase {
                         chainAccountsList, withdrawActionContext.chainId, withdrawActionContext.comet, actionIntent.actor
                     )
                     : withdrawActionContext.amount;
-                console.log("Withdraw amount is ", withdrawAmount, withdrawActionContext.amount);
                 HashMap.addOrPutUint256(assetsInPerChain, abi.encode(withdrawActionContext.chainId), withdrawAmount);
             }
         } else if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_MORPHO_VAULT_WITHDRAW)) {
@@ -857,7 +828,6 @@ contract QuarkBuilderBase {
                         actionIntent.actor
                     )
                     : withdrawActionContext.amount;
-                console.log("Withdraw amount is ", withdrawAmount, withdrawActionContext.amount);
                 HashMap.addOrPutUint256(assetsInPerChain, abi.encode(withdrawActionContext.chainId), withdrawAmount);
             }
         } else {

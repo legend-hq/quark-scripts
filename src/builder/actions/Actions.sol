@@ -1470,7 +1470,7 @@ library Actions {
 
         bytes memory scriptCalldata = abi.encodeWithSelector(
             QuotePay.pay.selector,
-            // TODO: DOES THIS WORK IN A MULTI-ACCOUNT WORLD?
+            // TODO: Does this work in a multi-account world?
             quotePayInfo.sender,
             assetPositions.asset,
             quotePayInfo.amount,
@@ -1502,7 +1502,7 @@ library Actions {
             quarkAccount: quotePayInfo.sender,
             actionType: ACTION_TYPE_QUOTE_PAY,
             actionContext: abi.encode(quotePayActionContext),
-            // TODO: UPDATE THIS (paymentMethodForPayment)
+            // TODO: Update this (paymentMethodForPayment)
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, true),
             paymentToken: payment.isToken
                 ? PaymentInfo.knownToken(payment.currency, quotePayInfo.chainId).token
@@ -1650,7 +1650,6 @@ library Actions {
         return (quarkOperation, action);
     }
 
-    // TODO: NEED TO SOMEHOW USE PAYCALL INSTEAD OF QUOTEPAY HERE...
     function recurringSwap(RecurringSwapParams memory swap, PaymentInfo.Payment memory payment, bool useQuotecall)
         internal
         pure

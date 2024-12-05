@@ -110,11 +110,9 @@ library QuarkOperationHelper {
         ) {
             primaryQuarkOperation = quarkOperations[quarkOperations.length - 2];
             primaryAction = actions[actions.length - 2];
-            console.log("Taking second to last");
         } else {
             primaryQuarkOperation = quarkOperations[quarkOperations.length - 1];
             primaryAction = actions[actions.length - 1];
-            console.log("Taking last");
         }
         // IQuarkWallet.QuarkOperation memory lastQuarkOperation = quarkOperations[quarkOperations.length - 1];
         IQuarkWallet.QuarkOperation memory mergedQuarkOperation = IQuarkWallet.QuarkOperation({

@@ -366,7 +366,6 @@ contract QuarkBuilderRecurringSwapTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    // TODO: What to do here? Recurring should still use paycall
     function testRecurringSwapWithPaycallSucceeds() public {
         QuarkBuilder builder = new QuarkBuilder();
         SwapActionsBuilder.RecurringSwapIntent memory buyWethIntent = buyWeth_({
