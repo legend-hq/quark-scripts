@@ -62,13 +62,14 @@ contract BridgingLogicTest is Test, QuarkBuilderTest {
                 sender: address(0xb0b),
                 recipient: address(0xceecee),
                 blockTimestamp: BLOCK_TIMESTAMP,
-                preferAcross: false
+                preferAcross: false,
+                paymentAssetSymbol: "USD"
             }), // transfer 1e18 WETH on chain 8453 to 0xceecee
             chainAccountsList,
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address wrapperActionsAddress = CodeJarHelper.getCodeAddress(type(WrapperActions).creationCode);
@@ -217,13 +218,14 @@ contract BridgingLogicTest is Test, QuarkBuilderTest {
                 sender: address(0xb0b),
                 recipient: address(0xceecee),
                 blockTimestamp: BLOCK_TIMESTAMP,
-                preferAcross: true
+                preferAcross: true,
+                paymentAssetSymbol: "USD"
             }), // transfer 5 USDC on chain 8453 to 0xceecee
             chainAccountsList_(6e6), // holding 6 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 2, "two operations");
