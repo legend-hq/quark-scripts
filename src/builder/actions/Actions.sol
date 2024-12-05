@@ -74,6 +74,9 @@ library Actions {
     uint256 constant RECURRING_SWAP_MAX_SLIPPAGE = 1e17; // 1%
     uint256 constant RECURRING_SWAP_WINDOW_LENGTH = 1 days;
 
+    // TODO: Move to BuilderPack
+    address constant QUOTE_PAY_RECIPIENT = 0x7ea8d6119596016935543d90Ee8f5126285060A1;
+
     /* ===== Custom Errors ===== */
 
     error BridgingUnsupportedForAsset();
@@ -1469,12 +1472,7 @@ library Actions {
         Accounts.QuarkSecret memory accountSecret = Accounts.findQuarkSecret(quotePayInfo.sender, accounts.quarkSecrets);
 
         bytes memory scriptCalldata = abi.encodeWithSelector(
-            QuotePay.pay.selector,
-            // TODO: Does this work in a multi-account world?
-            quotePayInfo.sender,
-            assetPositions.asset,
-            quotePayInfo.amount,
-            payment.quoteId
+            QuotePay.pay.selector, QUOTE_PAY_RECIPIENT, assetPositions.asset, quotePayInfo.amount, payment.quoteId
         );
         // Construct QuarkOperation
         IQuarkWallet.QuarkOperation memory quarkOperation = IQuarkWallet.QuarkOperation({

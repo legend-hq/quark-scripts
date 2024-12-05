@@ -151,11 +151,12 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
         callContracts[1] = quotePayAddress;
         bytes[] memory callDatas = new bytes[](2);
         callDatas[0] = abi.encodeWithSelector(CometWithdrawActions.withdraw.selector, cometUsdc_(1), link_(1), 1e18);
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cometWithdrawActionsAddress, quotePayAddress], [CometWithdrawActions.withdraw(cometUsdc_(1), LINK_1, 1e18), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cometWithdrawActionsAddress, quotePayAddress], [CometWithdrawActions.withdraw(cometUsdc_(1), LINK_1, 1e18), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -222,11 +223,12 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
         callContracts[1] = quotePayAddress;
         bytes[] memory callDatas = new bytes[](2);
         callDatas[0] = abi.encodeWithSelector(CometWithdrawActions.withdraw.selector, cometUsdc_(1), usdc_(1), 1e6);
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.5e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.5e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cometWithdrawActionsAddress, quotePayAddress], [CometWithdrawActions.withdraw(COMET, USDC_1, 1e6), QuotePay.pay(address(0xa11ce), USDC_1, 0.5e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cometWithdrawActionsAddress, quotePayAddress], [CometWithdrawActions.withdraw(COMET, USDC_1, 1e6), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.5e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -316,11 +318,12 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
         bytes[] memory callDatas = new bytes[](2);
         callDatas[0] =
             abi.encodeWithSelector(CometWithdrawActions.withdraw.selector, cometUsdc_(1), usdc_(1), type(uint256).max);
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cometWithdrawActionsAddress, quotePayAddress], [CometWithdrawActions.withdraw(COMET, USDC_1, uint256.max), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cometWithdrawActionsAddress, quotePayAddress], [CometWithdrawActions.withdraw(COMET, USDC_1, uint256.max), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"

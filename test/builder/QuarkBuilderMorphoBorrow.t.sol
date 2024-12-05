@@ -345,11 +345,12 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
             MorphoActions.supplyCollateralAndBorrow,
             (MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, "WBTC", "USDC"), 1e8, 1e6)
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([morphoActionsAddress, quotePayAddress], [MorphoActions.supplyCollateralAndBorrow(MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, WBTC, USDC), 1e8, 1e6, address(0xa11ce), address(0xa11ce)), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([morphoActionsAddress, quotePayAddress], [MorphoActions.supplyCollateralAndBorrow(MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, WBTC, USDC), 1e8, 1e6, address(0xa11ce), address(0xa11ce)), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(MorphoActions).creationCode);
@@ -450,11 +451,12 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
             MorphoActions.supplyCollateralAndBorrow,
             (MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, "WBTC", "USDC"), 1e8, 1e6)
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([morphoActionsAddress, quotePayAddress], [MorphoActions.supplyCollateralAndBorrow(MorphoInfo.getMorphoAddress(), MorphoInfo.getMarketParams(1, WBTC, USDC), 1e8, 1e6, address(0xa11ce), address(0xa11ce)), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([morphoActionsAddress, quotePayAddress], [MorphoActions.supplyCollateralAndBorrow(MorphoInfo.getMorphoAddress(), MorphoInfo.getMarketParams(1, WBTC, USDC), 1e8, 1e6, address(0xa11ce), address(0xa11ce)), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(MorphoActions).creationCode);

@@ -378,11 +378,12 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         callContracts[1] = quotePayAddress;
         bytes[] memory callDatas = new bytes[](2);
         callDatas[0] = abi.encodeWithSelector(CometSupplyActions.supply.selector, COMET, usdc_(1), 1e6);
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cometSupplyActionsAddress, quotePayAddress], [CometSupplyActions.supply(COMET, USDC, 1e6), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cometSupplyActionsAddress, quotePayAddress], [CometSupplyActions.supply(COMET, USDC, 1e6), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(CometSupplyActions).creationCode);
@@ -758,11 +759,12 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
             usdc_(1)
         );
         // TODO: Should be 0xbob once multi account is supported
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.6e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.6e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2.4e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1)), QuotePay.pay(address(0xa11ce), USDC_1, 0.6e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2.4e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1)), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.6e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(CCTPBridgeActions).creationCode);
@@ -887,11 +889,12 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
             usdc_(1)
         );
         // TODO: Should be 0xbob once multi account is supported
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.6e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.6e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1)), QuotePay.pay(address(0xa11ce), USDC_1, 0.6e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1)), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.6e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(CCTPBridgeActions).creationCode);

@@ -430,11 +430,12 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
             weth_(1),
             1e18
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.5e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.5e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cometRepayAndWithdrawMultipleAssetsAddress, quotePayAddress], [CometRepayAndWithdrawMultipleAssets.run(cometWeth_(1), [USDC_1], [1e6], WETH_1, 1e18), QuotePay.pay(address(0xa11ce), USDC_1, 0.5e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cometRepayAndWithdrawMultipleAssetsAddress, quotePayAddress], [CometRepayAndWithdrawMultipleAssets.run(cometWeth_(1), [USDC_1], [1e6], WETH_1, 1e18), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.5e6, QUOTE_ID)]);"
         );
 
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
@@ -562,11 +563,12 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
             bytes32(uint256(uint160(0xa11ce))),
             usdc_(1)
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.3e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.3e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(0xBd3fa81B58Ba92a82136038B25aDec7066af3155, 2e6, 6, 0xa11ce, USDC_1), QuotePay.pay(address(0xa11ce), USDC_1, 0.3e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(0xBd3fa81B58Ba92a82136038B25aDec7066af3155, 2e6, 6, 0xa11ce, USDC_1), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.3e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(CCTPBridgeActions).creationCode);
@@ -743,11 +745,12 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
             usdc_(1),
             type(uint256).max
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cometRepayAndWithdrawMultipleAssetsAddress, quotePayAddress], [CometRepayAndWithdrawMultipleAssets.run(cometUsdc_(1), [], [], USDC_1, uint256.max), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cometRepayAndWithdrawMultipleAssetsAddress, quotePayAddress], [CometRepayAndWithdrawMultipleAssets.run(cometUsdc_(1), [], [], USDC_1, uint256.max), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
 
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
@@ -882,11 +885,12 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
             usdc_(1)
         );
         // Covers the quote for both chains
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.2e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.2e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(0xBd3fa81B58Ba92a82136038B25aDec7066af3155, 10.01e6, 6, 0xa11ce, USDC_1), QuotePay.pay(address(0xa11ce), USDC_1, 0.2e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(0xBd3fa81B58Ba92a82136038B25aDec7066af3155, 10.01e6, 6, 0xa11ce, USDC_1), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.2e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(CCTPBridgeActions).creationCode);

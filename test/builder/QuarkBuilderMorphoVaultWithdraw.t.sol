@@ -135,11 +135,12 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
         callDatas[0] = abi.encodeWithSelector(
             MorphoVaultActions.withdraw.selector, MorphoInfo.getMorphoVaultAddress(1, "USDC"), 2e6
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([morphoVaultActionsAddress, quotePayAddress], [MorphoVaultActions.withdraw(MorphoInfo.getMorphoVaultAddress(1, USDC), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([morphoVaultActionsAddress, quotePayAddress], [MorphoVaultActions.withdraw(MorphoInfo.getMorphoVaultAddress(1, USDC), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -206,11 +207,12 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
         callDatas[0] = abi.encodeWithSelector(
             MorphoVaultActions.withdraw.selector, MorphoInfo.getMorphoVaultAddress(1, "USDC"), 2e6
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.5e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.5e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([morphoVaultActionsAddress, quotePayAddress], [MorphoVaultWithdrawActions.withdraw(MorphoInfo.getMorphoVaultAddress(1, USDC), 2e6), QuotePay.pay(address(0xa11ce), USDC_1, 0.5e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([morphoVaultActionsAddress, quotePayAddress], [MorphoVaultWithdrawActions.withdraw(MorphoInfo.getMorphoVaultAddress(1, USDC), 2e6), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.5e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -299,11 +301,12 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
         callDatas[0] = abi.encodeWithSelector(
             MorphoVaultActions.withdraw.selector, MorphoInfo.getMorphoVaultAddress(1, "USDC"), type(uint256).max
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([morphoVaultActionsAddress, quotePayAddress], [MorphoVaultActions.redeemAll(MorphoInfo.getMorphoVaultAddress(1, USDC)), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([morphoVaultActionsAddress, quotePayAddress], [MorphoVaultActions.redeemAll(MorphoInfo.getMorphoVaultAddress(1, USDC)), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"

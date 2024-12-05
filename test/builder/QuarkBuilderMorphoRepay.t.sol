@@ -362,11 +362,12 @@ contract QuarkBuilderMorphoRepayTest is Test, QuarkBuilderTest {
             MorphoActions.repayAndWithdrawCollateral,
             (MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, "WBTC", "USDC"), 1e6, 0e8)
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([morphoActionsAddress, quotePayAddress], [MorphoActions.repayAndWithdrawCollateral(MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, WBTC, USDC), 1e6, 0), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([morphoActionsAddress, quotePayAddress], [MorphoActions.repayAndWithdrawCollateral(MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, WBTC, USDC), 1e6, 0), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(MorphoActions).creationCode);
@@ -496,11 +497,11 @@ contract QuarkBuilderMorphoRepayTest is Test, QuarkBuilderTest {
     //             bytes32(uint256(uint160(0xb0b))),
     //             usdc_(1)
     //         );
-    //         callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.3e6, QUOTE_ID);
+    //         callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.3e6, QUOTE_ID);
     //         assertEq(
     //             result.quarkOperations[0].scriptCalldata,
     //             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-    //             "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCCTPBridgeActions.bridgeUSDC(0xBd3fa81B58Ba92a82136038B25aDec7066af3155, 2e6, 6, 0xb0b, USDC_1)), QuotePay.pay(address(0xa11ce), USDC_1, 0.3e6, QUOTE_ID)]);"
+    //             "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCCTPBridgeActions.bridgeUSDC(0xBd3fa81B58Ba92a82136038B25aDec7066af3155, 2e6, 6, 0xb0b, USDC_1)), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.3e6, QUOTE_ID)]);"
     //         );
     //     }
     //     assertEq(result.quarkOperations[0].scriptSources.length, 3);
@@ -655,11 +656,11 @@ contract QuarkBuilderMorphoRepayTest is Test, QuarkBuilderTest {
     //             MorphoActions.repayAndWithdrawCollateral,
     //             (MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, "WBTC", "USDC"), type(uint256).max, 0)
     //         );
-    //         callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+    //         callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
     //         assertEq(
     //             result.quarkOperations[0].scriptCalldata,
     //             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-    //             "calldata is Multicall.run([morphoActionsAddress, quotePayAddress], [MorphoActions.repayAndWithdrawCollateral(MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, WBTC, USDC), type(uint256).max, 0), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
+    //             "calldata is Multicall.run([morphoActionsAddress, quotePayAddress], [MorphoActions.repayAndWithdrawCollateral(MorphoInfo.getMorphoAddress(1), MorphoInfo.getMarketParams(1, WBTC, USDC), type(uint256).max, 0), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.1e6, QUOTE_ID)]);"
     //         );
     //     }
     //     assertEq(result.quarkOperations[0].scriptSources.length, 3);
@@ -786,11 +787,11 @@ contract QuarkBuilderMorphoRepayTest is Test, QuarkBuilderTest {
     //             bytes32(uint256(uint160(0xb0b))),
     //             usdc_(1)
     //         );
-    //         callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.2e6, QUOTE_ID);
+    //         callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.2e6, QUOTE_ID);
     //         assertEq(
     //             result.quarkOperations[0].scriptCalldata,
     //             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-    //             "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(0xBd3fa81B58Ba92a82136038B25aDec7066af3155, 10.01e6, 6, 0xb0b, USDC_1)), QuotePay.pay(address(0xa11ce), USDC_1, 0.2e6, QUOTE_ID)]);"
+    //             "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(0xBd3fa81B58Ba92a82136038B25aDec7066af3155, 10.01e6, 6, 0xb0b, USDC_1)), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.2e6, QUOTE_ID)]);"
     //         );
     //     }
     //     assertEq(result.quarkOperations[0].scriptSources.length, 3);

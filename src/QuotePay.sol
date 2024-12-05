@@ -18,7 +18,7 @@ contract QuotePay {
 
     /**
      * @notice Pay the payee the quoted amount of the payment token
-     * @param payee The token used to pay for this transaction
+     * @param payee The receiver of this payment
      * @param paymentToken The token used to pay for this transaction
      * @param quotedAmount The quoted network fee for this transaction, in units of the payment token
      * @param quoteId The identifier of the quote that is being paid

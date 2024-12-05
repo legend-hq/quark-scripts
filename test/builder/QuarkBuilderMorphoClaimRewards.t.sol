@@ -187,11 +187,11 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
             MorphoRewardsActions.claimAll,
             (fixtureDistributors, fixtureAccounts, fixtureRewards, fixtureClaimables, fixtureProofs)
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 1e6, QUOTE_ID);
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([morphoRewardsActionsAddress, quotePayAddress], [MorphoRewardsActions.claimAll(fixtureDistributors, fixtureAccounts, fixtureRewards, fixtureClaimables, fixtureProofs), QuotePay.pay(address(0xa11ce), USDC_1, 1e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([morphoRewardsActionsAddress, quotePayAddress], [MorphoRewardsActions.claimAll(fixtureDistributors, fixtureAccounts, fixtureRewards, fixtureClaimables, fixtureProofs), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 1e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(MorphoRewardsActions).creationCode);

@@ -410,8 +410,8 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations[1].scriptAddress, quotePayAddress, "script address[1] is the quote pay address");
         assertEq(
             result.quarkOperations[1].scriptCalldata,
-            abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 1.1e6, QUOTE_ID),
-            "calldata is QuotePay.pay(address(0xa11ce), USDC_1, 1.1e6, QUOTE_ID);"
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 1.1e6, QUOTE_ID),
+            "calldata is QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT, USDC_1, 1.1e6, QUOTE_ID);"
         );
         assertEq(result.quarkOperations[1].scriptSources.length, 1, "one script source");
         assertEq(result.quarkOperations[1].scriptSources[0], type(QuotePay).creationCode);
@@ -562,12 +562,12 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
             2e6
         );
         // Note: Only chain 1 is used, so the payment is only for the chain 1 cost (1.5e6 USDC)
-        // TODO: The payee should be Bob, but we don't currently handle multi accounts well
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 1.5e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 1.5e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cometSupplyMultipleAssetsAndBorrowAddress, quotePayAddress], [CometSupplyMultipleAssetsAndBorrow.run(COMET_1_USDC, [LINK_1], [1e18], USDC_1, 2e6), QuotePay.pay(address(0xb0b), USDC_1, 1.5e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cometSupplyMultipleAssetsAndBorrowAddress, quotePayAddress], [CometSupplyMultipleAssetsAndBorrow.run(COMET_1_USDC, [LINK_1], [1e18], USDC_1, 2e6), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT, USDC_1, 1.5e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(CometSupplyMultipleAssetsAndBorrow).creationCode);
@@ -696,11 +696,12 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
             usdc_(1)
         );
         // Covers the quote for both chains
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.3e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.3e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(0xBd3fa81B58Ba92a82136038B25aDec7066af3155, 2.2e6, 6, 0xa11ce, USDC_1), QuotePay.pay(address(0xa11ce), USDC_1, 0.3e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(0xBd3fa81B58Ba92a82136038B25aDec7066af3155, 2.2e6, 6, 0xa11ce, USDC_1), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.3e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(CCTPBridgeActions).creationCode);

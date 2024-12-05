@@ -452,11 +452,11 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
             bytes32(uint256(uint160(0xb0b))),
             usdc_(1)
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 6e5, QUOTE_ID);
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 6e5, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1)), QuotePay.pay(address(0xa11ce), USDC_1, 6e5, QUOTE_ID)]);"
+            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1)), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 6e5, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -578,11 +578,11 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
             address(0xceecee),
             9.9e6
         );
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 1e5, QUOTE_ID);
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 1e5, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([transferActionsAddress, quotePayAddress], [TransferActions.transferERC20Token(USDC_1, address(0xceecee), 9.9e6), QuotePay.pay(address(0xa11ce), USDC_1, 6e5, QUOTE_ID)]);"
+            "calldata is Multicall.run([transferActionsAddress, quotePayAddress], [TransferActions.transferERC20Token(USDC_1, address(0xceecee), 9.9e6), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 6e5, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -690,11 +690,12 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
             usdc_(1)
         );
         // TODO: should be 0xb0b
-        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.6e6, QUOTE_ID);
+        callDatas[1] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.6e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 7.4e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1), QuotePay.pay(address(0xa11ce), USDC_1, 0.6e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 7.4e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.6e6, QUOTE_ID)]);"
         );
         assertEq(result.quarkOperations[0].scriptSources.length, 3);
         assertEq(result.quarkOperations[0].scriptSources[0], type(CCTPBridgeActions).creationCode);
@@ -1014,11 +1015,12 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
             WrapperActions.unwrapWETHUpTo.selector, 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2, 1.5e18
         );
         callDatas[1] = abi.encodeWithSelector(TransferActions.transferNativeToken.selector, address(0xceecee), 1.5e18);
-        callDatas[2] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+        callDatas[2] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
-            "calldata is Multicall.run([wrapperActionsAddress, transferActionsAddress, quotePayAddress], [WrapperActions.unwrapWETHUpTo(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2, 1.5e18), TransferActions.transferNativeToken(address(0xceecee), 1.5e18), QuotePay.pay(address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID)]);"
+            "calldata is Multicall.run([wrapperActionsAddress, transferActionsAddress, quotePayAddress], [WrapperActions.unwrapWETHUpTo(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2, 1.5e18), TransferActions.transferNativeToken(address(0xceecee), 1.5e18), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 0.1e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -1122,7 +1124,8 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
             WrapperActions.unwrapWETHUpTo.selector, 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2, 2e18
         );
         callDatas[1] = abi.encodeWithSelector(TransferActions.transferNativeToken.selector, address(0xceecee), 2e18);
-        callDatas[2] = abi.encodeWithSelector(QuotePay.pay.selector, address(0xa11ce), USDC_1, 0.1e6, QUOTE_ID);
+        callDatas[2] =
+            abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 0.1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
             abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
