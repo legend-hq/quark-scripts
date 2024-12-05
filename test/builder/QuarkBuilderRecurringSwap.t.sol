@@ -128,7 +128,7 @@ contract QuarkBuilderRecurringSwapTest is Test, QuarkBuilderTest {
 
     function testRecurringSwapMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructPaycall.selector, "usdc", 1_000e6));
         builder.recurringSwap(
             buyWeth_({
                 chainId: 1,

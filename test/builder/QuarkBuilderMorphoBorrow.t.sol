@@ -518,7 +518,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
             morphoVaultPortfolios: emptyMorphoVaultPortfolios_()
         });
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
         builder.morphoBorrow(
             borrowIntent_(1, "WETH", 1e18, "WBTC", 0),
             chainAccountsFromChainPortfolios(chainPortfolios),

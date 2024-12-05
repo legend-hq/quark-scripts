@@ -55,7 +55,9 @@ contract QuarkBuilderBase {
     error MissingWrapperCounterpart();
     error BalanceNotRight(uint256 paymentAssetBalance, uint256 assetsIn, uint256 assetsOut);
     error InvalidRepayActionContext();
-    error UnableToConstructQuotePay(string assetSymbol);
+    error ImpossibleToConstructQuotePay(string assetSymbol);
+    error UnableToConstructQuotePay(string assetSymbol, uint256 totalQuoteAmount);
+    error UnableToConstructPaycall(string assetSymbol, uint256 maxCost);
 
     /**
      * @dev Intent for an action to be executed by the Quark Wallet
@@ -542,14 +544,39 @@ contract QuarkBuilderBase {
             );
         }
 
-        // NOTE: This means a QuotePay was not able to be constructed. Currently reverts even if user has a total amount more
-        //       than the quote amount if they cannot cover the whole quote amount on any single chain.
-        revert UnableToConstructQuotePay(paymentTokenSymbol);
-        // revert UnableToConstructQuotePay(
-        //     paymentTokenSymbol,
-        //     PaymentInfo.totalCost(args.payment, List.toUint256Array(chainIdsInvolved)),
-        //     Accounts.totalBalance(paymentTokenSymbol, args.chainAccountsList)
-        // );
+        // Unable to construct a proper quote pay, so we try to find a chain that has enough of the payment token and then construct the totalQuoteAmount based on that.
+        // Then we throw an error that contains the total quote amount.
+        uint256 totalQuoteAmount;
+        bool eligibleChainFound;
+        // TODO: As an optimization, we can search for the chain that gives us the lowest totalQuoteAmount
+        for (uint256 i = 0; i < args.chainAccountsList.length; ++i) {
+            uint256 chainId = args.chainAccountsList[i].chainId;
+
+            // Generate quote amount based on which chains have an operation on them
+            totalQuoteAmount = PaymentInfo.totalCost(args.payment, List.toUint256Array(chainIdsInvolved));
+            // Add the quote for the current chain if it is not already included in the sum
+            if (!List.contains(chainIdsInvolved, chainId)) {
+                totalQuoteAmount += PaymentInfo.findMaxCost(args.payment, chainId);
+            }
+
+            // Calculate the net payment balance on this chain
+            // TODO: Need to be modified when supporting multiple accounts per chain, since this currently assumes all assets are in one account.
+            //       Will need a 2D map for assetsIn/Out to map from chainId -> account
+            Accounts.AssetPositions memory paymentAssetPositions =
+                Accounts.findAssetPositions(paymentTokenSymbol, args.chainAccountsList[i].assetPositionsList);
+            uint256 paymentAssetBalanceOnChain = Accounts.sumBalances(paymentAssetPositions);
+
+            if (paymentAssetBalanceOnChain >= totalQuoteAmount) {
+                eligibleChainFound = true;
+                break;
+            }
+        }
+
+        if (eligibleChainFound) {
+            revert UnableToConstructQuotePay(paymentTokenSymbol, totalQuoteAmount);
+        } else {
+            revert ImpossibleToConstructQuotePay(paymentTokenSymbol);
+        }
     }
 
     /**
@@ -597,8 +624,9 @@ contract QuarkBuilderBase {
         uint256 netPaymentAssetBalanceOnChain = paymentAssetBalanceOnChain
             + HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0)
             - HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0);
+
         if (netPaymentAssetBalanceOnChain < maxCost) {
-            revert UnableToConstructQuotePay(paymentTokenSymbol);
+            revert UnableToConstructPaycall(paymentTokenSymbol, maxCost);
         }
     }
 

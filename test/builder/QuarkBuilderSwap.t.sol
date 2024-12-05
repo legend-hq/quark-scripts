@@ -95,7 +95,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         });
     }
 
-    function testInsufficientFunds() public {
+    function testSwapInsufficientFunds() public {
         QuarkBuilder builder = new QuarkBuilder();
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 3000e6, 0e6));
         builder.swap(
@@ -105,9 +105,9 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         );
     }
 
-    function testMaxCostTooHigh() public {
+    function testSwapMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
         builder.swap(
             buyWeth_(1, usdc_(1), 30e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 30 USDC on chain 1 to 0.01 WETH
             chainAccountsList_(60e6), // holding 60 USDC in total across chains 1, 8453
@@ -115,7 +115,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         );
     }
 
-    function testFundsOnUnbridgeableChains() public {
+    function testSwapFundsOnUnbridgeableChains() public {
         QuarkBuilder builder = new QuarkBuilder();
         // FundsUnavailable("USDC", 2e6, 0e6): Requested 2e6, Available 0e6
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 30e6, 0e6));
@@ -127,7 +127,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         );
     }
 
-    function testFundsUnavailableErrorGivesSuggestionForAvailableFunds() public {
+    function testSwapFundsUnavailableErrorGivesSuggestionForAvailableFunds() public {
         QuarkBuilder builder = new QuarkBuilder();
         // The 30e6 is the suggested amount (total available funds) to swap
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 35e6, 30e6));

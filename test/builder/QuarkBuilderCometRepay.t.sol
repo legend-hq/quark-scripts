@@ -76,7 +76,7 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
     function testCometRepayNotEnoughPaymentToken() public {
         QuarkBuilder builder = new QuarkBuilder();
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6}); // action costs .5 USDC
+        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6}); // action costs 0.5 USDC
 
         uint256[] memory collateralAmounts = new uint256[](0);
         string[] memory collateralAssetSymbols = new string[](0);
@@ -94,7 +94,7 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
         });
 
         // Need 0.5e6 USDC to pay the quote but Alice only has 0.4e6 USDC
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
         builder.cometRepay(
             repayIntent_(1, cometWeth_(1), "WETH", 1e18, collateralAssetSymbols, collateralAmounts),
             chainAccountsFromChainPortfolios(chainPortfolios),

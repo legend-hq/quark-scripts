@@ -386,7 +386,7 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
         builder.cometWithdraw(
             cometWithdraw_(1, cometUsdc_(1), "USDC", type(uint256).max),
             chainAccountsFromChainPortfolios(chainPortfolios),
@@ -401,7 +401,7 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
         maxCosts[2] = PaymentInfo.PaymentMaxCost({chainId: 7777, amount: 5e6});
         QuarkBuilder builder = new QuarkBuilder();
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
         builder.cometWithdraw(
             cometWithdraw_(1, cometUsdc_(1), "USDC", 1e6),
             chainAccountsList_(0e6),

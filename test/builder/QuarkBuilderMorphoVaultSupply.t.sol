@@ -43,7 +43,7 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         });
     }
 
-    function testInsufficientFunds() public {
+    function testMorphoSupplyInsufficientFunds() public {
         QuarkBuilder builder = new QuarkBuilder();
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 2e6, 0e6));
         builder.morphoVaultSupply(
@@ -60,9 +60,9 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         );
     }
 
-    function testMaxCostTooHigh() public {
+    function testMorphoSupplyMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
         builder.morphoVaultSupply(
             MorphoVaultActionsBuilder.MorphoVaultSupplyIntent({
                 amount: 1e6,
@@ -77,7 +77,7 @@ contract QuarkBuilderMorphoVaultTest is Test, QuarkBuilderTest {
         );
     }
 
-    function testFundsUnavailable() public {
+    function testMorphoSupplyFundsUnavailable() public {
         QuarkBuilder builder = new QuarkBuilder();
         Accounts.ChainAccounts[] memory chainAccountsList = new Accounts.ChainAccounts[](3);
         chainAccountsList[0] = Accounts.ChainAccounts({

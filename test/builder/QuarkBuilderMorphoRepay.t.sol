@@ -87,7 +87,7 @@ contract QuarkBuilderMorphoRepayTest is Test, QuarkBuilderTest {
             morphoVaultPortfolios: emptyMorphoVaultPortfolios_()
         });
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
         builder.morphoRepay(
             repayIntent_(8453, "WETH", 1e18, "cbETH", 1e18),
             chainAccountsFromChainPortfolios(chainPortfolios),

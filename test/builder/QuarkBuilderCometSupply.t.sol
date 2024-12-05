@@ -61,7 +61,7 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         });
     }
 
-    function testInsufficientFunds() public {
+    function testCometSupplyInsufficientFunds() public {
         QuarkBuilder builder = new QuarkBuilder();
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 2e6, 0e6));
         builder.cometSupply(
@@ -71,9 +71,9 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         );
     }
 
-    function testMaxCostTooHigh() public {
+    function testCometSupplyMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
         builder.cometSupply(
             cometSupply_(1, 1e6),
             chainAccountsList_(2e6), // holding 2 USDC in total across 1, 8453
@@ -81,7 +81,7 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         );
     }
 
-    function testFundsUnavailable() public {
+    function testCometSupplyFundsUnavailable() public {
         QuarkBuilder builder = new QuarkBuilder();
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 2e6, 0));
         builder.cometSupply(

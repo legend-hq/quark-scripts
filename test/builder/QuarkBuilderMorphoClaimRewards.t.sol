@@ -250,7 +250,7 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
         maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 100e6});
         maxCosts[2] = PaymentInfo.PaymentMaxCost({chainId: 7777, amount: 100e6});
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.UnableToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
         builder.morphoClaimRewards(
             morphoClaimRewardsIntent_(
                 1, fixtureAccounts, fixtureClaimablesLessUSDC, fixtureDistributors, fixtureRewards, fixtureProofs
