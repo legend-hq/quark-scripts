@@ -114,7 +114,6 @@ library QuarkOperationHelper {
             primaryQuarkOperation = quarkOperations[quarkOperations.length - 1];
             primaryAction = actions[actions.length - 1];
         }
-        // IQuarkWallet.QuarkOperation memory lastQuarkOperation = quarkOperations[quarkOperations.length - 1];
         IQuarkWallet.QuarkOperation memory mergedQuarkOperation = IQuarkWallet.QuarkOperation({
             nonce: primaryQuarkOperation.nonce,
             isReplayable: primaryQuarkOperation.isReplayable,

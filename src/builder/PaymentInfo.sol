@@ -17,8 +17,8 @@ library PaymentInfo {
         // Note: Payment `currency` should be the same across chains
         string currency;
         // Note: If quote is not specified for a chain when paying with token, then that chain is ignored
-        // TODO: Treat PaymentMaxCost as Quote for now. Rename later
         bytes32 quoteId;
+        // TODO: Rename to something more fitting (e.g. `quote`)
         PaymentMaxCost[] maxCosts;
     }
 
