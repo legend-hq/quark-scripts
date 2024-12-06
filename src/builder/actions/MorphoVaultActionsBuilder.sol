@@ -16,6 +16,7 @@ import {TokenWrapper} from "src/builder/TokenWrapper.sol";
 import {QuarkOperationHelper} from "src/builder/QuarkOperationHelper.sol";
 import {List} from "src/builder/List.sol";
 import {QuarkBuilderBase} from "src/builder/QuarkBuilderBase.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 
 contract MorphoVaultActionsBuilder is QuarkBuilderBase {
     struct MorphoVaultSupplyIntent {
@@ -107,13 +108,16 @@ contract MorphoVaultActionsBuilder is QuarkBuilderBase {
         uint256 chainId;
         address withdrawer;
         bool preferAcross;
+        string paymentAssetSymbol;
     }
 
     function morphoVaultWithdraw(
         MorphoVaultWithdrawIntent memory withdrawIntent,
         Accounts.ChainAccounts[] memory chainAccountsList,
-        PaymentInfo.Payment memory payment
+        Quotes.Quote memory quote
     ) external pure returns (BuilderResult memory) {
+        PaymentInfo.Payment memory payment =
+            Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, withdrawIntent.paymentAssetSymbol);
         // XXX confirm that you actually have the amount to withdraw
 
         bool isMaxWithdraw = withdrawIntent.amount == type(uint256).max;
