@@ -16,7 +16,9 @@ library PaymentInfo {
         bool isToken;
         // Note: Payment `currency` should be the same across chains
         string currency;
-        // Note: If max cost is not specified for a chain when paying with token, then that chain is ignored
+        // Note: If quote is not specified for a chain when paying with token, then that chain is ignored
+        bytes32 quoteId;
+        // TODO: Rename to something more fitting (e.g. `quote`)
         PaymentMaxCost[] maxCosts;
     }
 
@@ -85,6 +87,14 @@ library PaymentInfo {
             }
         }
         revert MaxCostMissingForChain(chainId);
+    }
+
+    function totalCost(Payment memory payment, uint256[] memory chainIds) internal pure returns (uint256) {
+        uint256 total;
+        for (uint256 i = 0; i < chainIds.length; ++i) {
+            total += PaymentInfo.findMaxCost(payment, chainIds[i]);
+        }
+        return total;
     }
 
     function hasMaxCostForChain(Payment memory payment, uint256 chainId) internal pure returns (bool) {

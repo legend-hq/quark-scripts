@@ -18,12 +18,12 @@ contract QuotePay {
 
     /**
      * @notice Pay the payee the quoted amount of the payment token
-     * @param payee The token used to pay for this transaction
+     * @param payee The receiver of this payment
      * @param paymentToken The token used to pay for this transaction
      * @param quotedAmount The quoted network fee for this transaction, in units of the payment token
      * @param quoteId The identifier of the quote that is being paid
      */
-    function run(address payee, address paymentToken, uint256 quotedAmount, bytes32 quoteId) external {
+    function pay(address payee, address paymentToken, uint256 quotedAmount, bytes32 quoteId) external {
         IERC20(paymentToken).safeTransfer(payee, quotedAmount);
         emit PayQuote(address(this), payee, paymentToken, quotedAmount, quoteId);
     }

@@ -12,11 +12,12 @@ import {CodeJarHelper} from "src/builder/CodeJarHelper.sol";
 import {TransferActions} from "src/DeFiScripts.sol";
 import {MorphoInfo} from "src/builder/MorphoInfo.sol";
 import {MorphoRewardsActions} from "src/MorphoScripts.sol";
+import {Multicall} from "src/Multicall.sol";
 import {List} from "src/builder/List.sol";
-import {Paycall} from "src/Paycall.sol";
 import {QuarkBuilder} from "src/builder/QuarkBuilder.sol";
 import {QuarkBuilderBase} from "src/builder/QuarkBuilderBase.sol";
 import {MorphoActionsBuilder} from "src/builder/actions/MorphoActionsBuilder.sol";
+import {QuotePay} from "src/QuotePay.sol";
 
 contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
     // Fixtures of morpho reward data to pass in
@@ -152,8 +153,11 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
 
     function testMorphoClaimRewardsPayWithReward() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
+        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](3);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 1e6});
+        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 1e6});
+        maxCosts[2] = PaymentInfo.PaymentMaxCost({chainId: 7777, amount: 1e6});
+
         QuarkBuilder.BuilderResult memory result = builder.morphoClaimRewards(
             morphoClaimRewardsIntent_(
                 1, fixtureAccounts, fixtureClaimables, fixtureDistributors, fixtureRewards, fixtureProofs
@@ -162,32 +166,37 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
             paymentUsdc_(maxCosts)
         );
 
+        address morphoRewardsActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoRewardsActions).creationCode);
+        address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
+        address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
+
         assertEq(result.paymentCurrency, "usdc", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
         assertEq(
             result.quarkOperations[0].scriptAddress,
-            paycallUsdc_(1),
+            multicallAddress,
             "script address is correct given the code jar address on mainnet"
         );
+        address[] memory callContracts = new address[](2);
+        callContracts[0] = morphoRewardsActionsAddress;
+        callContracts[1] = quotePayAddress;
+        bytes[] memory callDatas = new bytes[](2);
+        callDatas[0] = abi.encodeCall(
+            MorphoRewardsActions.claimAll,
+            (fixtureDistributors, fixtureAccounts, fixtureRewards, fixtureClaimables, fixtureProofs)
+        );
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 1e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                CodeJarHelper.getCodeAddress(type(MorphoRewardsActions).creationCode),
-                abi.encodeCall(
-                    MorphoRewardsActions.claimAll,
-                    (fixtureDistributors, fixtureAccounts, fixtureRewards, fixtureClaimables, fixtureProofs)
-                ),
-                1e6
-            ),
-            "calldata is Paycall.run(MorphoRewardsActions.claimAll(fixtureDistributors, fixtureAccounts, fixtureRewards, fixtureClaimables, fixtureProofs));"
+            abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
+            "calldata is Multicall.run([morphoRewardsActionsAddress, quotePayAddress], [MorphoRewardsActions.claimAll(fixtureDistributors, fixtureAccounts, fixtureRewards, fixtureClaimables, fixtureProofs), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 1e6, QUOTE_ID)]);"
         );
-        assertEq(
-            result.quarkOperations[0].scriptSources[1],
-            abi.encodePacked(type(Paycall).creationCode, abi.encode(ETH_USD_PRICE_FEED_1, USDC_1))
-        );
+        assertEq(result.quarkOperations[0].scriptSources.length, 3);
+        assertEq(result.quarkOperations[0].scriptSources[0], type(MorphoRewardsActions).creationCode);
+        assertEq(result.quarkOperations[0].scriptSources[1], type(QuotePay).creationCode);
+        assertEq(result.quarkOperations[0].scriptSources[2], type(Multicall).creationCode);
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
         );
@@ -234,12 +243,14 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testMorphoClaimRewardsWithNotEnoughRewardToCoverCost() public {
+    function testMorphoClaimRewardsMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 5e6});
-        vm.expectRevert(abi.encodeWithSelector(Actions.NotEnoughFundsToBridge.selector, "usdc", 3e6, 3e6));
+        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](3);
+        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 100e6});
+        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 100e6});
+        maxCosts[2] = PaymentInfo.PaymentMaxCost({chainId: 7777, amount: 100e6});
+
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
         builder.morphoClaimRewards(
             morphoClaimRewardsIntent_(
                 1, fixtureAccounts, fixtureClaimablesLessUSDC, fixtureDistributors, fixtureRewards, fixtureProofs

@@ -14,12 +14,10 @@ import {Accounts} from "src/builder/Accounts.sol";
 import {CodeJarHelper} from "src/builder/CodeJarHelper.sol";
 import {QuarkBuilder} from "src/builder/QuarkBuilder.sol";
 import {QuarkBuilderBase} from "src/builder/QuarkBuilderBase.sol";
-import {Paycall} from "src/Paycall.sol";
-import {Quotecall} from "src/Quotecall.sol";
 import {Multicall} from "src/Multicall.sol";
 import {WrapperActions} from "src/WrapperScripts.sol";
-import {PaycallWrapper} from "src/builder/PaycallWrapper.sol";
 import {PaymentInfo} from "src/builder/PaymentInfo.sol";
+import {QuotePay} from "src/QuotePay.sol";
 
 contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
     address constant ZERO_EX_ENTRY_POINT = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
@@ -97,7 +95,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         });
     }
 
-    function testInsufficientFunds() public {
+    function testSwapInsufficientFunds() public {
         QuarkBuilder builder = new QuarkBuilder();
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 3000e6, 0e6));
         builder.swap(
@@ -107,11 +105,9 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         );
     }
 
-    // TODO: This no longer tests for the MaxCostTooHigh, since it may be unreachable now. Verify that this is the case.
-    function testMaxCostTooHigh() public {
+    function testSwapMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        // Max cost is too high, so total available funds is 0
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 30e6, 0e6));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
         builder.swap(
             buyWeth_(1, usdc_(1), 30e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 30 USDC on chain 1 to 0.01 WETH
             chainAccountsList_(60e6), // holding 60 USDC in total across chains 1, 8453
@@ -119,7 +115,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         );
     }
 
-    function testFundsOnUnbridgeableChains() public {
+    function testSwapFundsOnUnbridgeableChains() public {
         QuarkBuilder builder = new QuarkBuilder();
         // FundsUnavailable("USDC", 2e6, 0e6): Requested 2e6, Available 0e6
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 30e6, 0e6));
@@ -131,12 +127,12 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         );
     }
 
-    function testFundsUnavailableErrorGivesSuggestionForAvailableFunds() public {
+    function testSwapFundsUnavailableErrorGivesSuggestionForAvailableFunds() public {
         QuarkBuilder builder = new QuarkBuilder();
-        // The 32e6 is the suggested amount (total available funds) to swap
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 30e6, 27e6));
+        // The 30e6 is the suggested amount (total available funds) to swap
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 35e6, 30e6));
         builder.swap(
-            buyWeth_(1, usdc_(1), 30e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 30 USDC on chain 1 to 0.01 WETH
+            buyWeth_(1, usdc_(1), 35e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 30 USDC on chain 1 to 0.01 WETH
             chainAccountsList_(60e6), // holding 60 USDC in total across 1, 8453
             paymentUsdc_(maxCosts_(1, 3e6)) // but costs 3 USDC
         );
@@ -336,7 +332,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testLocalSwapWithPaycallSucceeds() public {
+    function testLocalSwapWithQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e6});
@@ -347,9 +343,8 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         );
 
         address approveAndSwapAddress = CodeJarHelper.getCodeAddress(type(ApproveAndSwap).creationCode);
-        address paycallAddress = CodeJarHelper.getCodeAddress(
-            abi.encodePacked(type(Paycall).creationCode, abi.encode(ETH_USD_PRICE_FEED_1, USDC_1))
-        );
+        address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
+        address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
         assertEq(result.paymentCurrency, "usdc", "usdc currency");
 
@@ -357,20 +352,21 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations.length, 1, "one operation");
         assertEq(
             result.quarkOperations[0].scriptAddress,
-            paycallAddress,
-            "script address is correct given the code jar address on mainnet"
+            multicallAddress,
+            "script address[0] has been wrapped with multicall address"
         );
+        address[] memory callContracts = new address[](2);
+        callContracts[0] = approveAndSwapAddress;
+        callContracts[1] = quotePayAddress;
+        bytes[] memory callDatas = new bytes[](2);
+        callDatas[0] = abi.encodeWithSelector(
+            ApproveAndSwap.run.selector, ZERO_EX_ENTRY_POINT, USDC_1, 3000e6, WETH_1, 1e18, ZERO_EX_SWAP_DATA
+        );
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 5e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                approveAndSwapAddress,
-                abi.encodeWithSelector(
-                    ApproveAndSwap.run.selector, ZERO_EX_ENTRY_POINT, USDC_1, 3000e6, WETH_1, 1e18, ZERO_EX_SWAP_DATA
-                ),
-                5e6
-            ),
-            "calldata is Paycall.run(ApproveAndSwap.run(ZERO_EX_ENTRY_POINT, USDC_1, 3500e6, WETH_1, 1e18, ZERO_EX_SWAP_DATA), 5e6);"
+            abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
+            "calldata is Multicall.run([approveAndSwapAddress, quotePayAddress], [ApproveAndSwap.run(ZERO_EX_ENTRY_POINT, USDC_1, 3500e6, WETH_1, 1e18, ZERO_EX_SWAP_DATA), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 5e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 3 days, "expiry is current blockTimestamp + 3 days"
@@ -454,9 +450,8 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         );
 
         address approveAndSwapAddress = CodeJarHelper.getCodeAddress(type(ApproveAndSwap).creationCode);
-        address quotecallAddress = CodeJarHelper.getCodeAddress(
-            abi.encodePacked(type(Quotecall).creationCode, abi.encode(ETH_USD_PRICE_FEED_1, USDC_1))
-        );
+        address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
+        address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
         assertEq(result.paymentCurrency, "usdc", "usdc currency");
 
@@ -464,20 +459,21 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations.length, 1, "one operation");
         assertEq(
             result.quarkOperations[0].scriptAddress,
-            quotecallAddress,
+            multicallAddress,
             "script address is correct given the code jar address on mainnet"
         );
+        address[] memory callContracts = new address[](2);
+        callContracts[0] = approveAndSwapAddress;
+        callContracts[1] = quotePayAddress;
+        bytes[] memory callDatas = new bytes[](2);
+        callDatas[0] = abi.encodeWithSelector(
+            ApproveAndSwap.run.selector, ZERO_EX_ENTRY_POINT, USDC_1, 9000e6, WETH_1, 3e18, ZERO_EX_SWAP_DATA
+        );
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 5e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Quotecall.run.selector,
-                approveAndSwapAddress,
-                abi.encodeWithSelector(
-                    ApproveAndSwap.run.selector, ZERO_EX_ENTRY_POINT, USDC_1, 9000e6, WETH_1, 3e18, ZERO_EX_SWAP_DATA
-                ),
-                5e6
-            ),
-            "calldata is Quotecall.run(ApproveAndSwap.run(ZERO_EX_ENTRY_POINT, USDC_1, 9000e6, WETH_1, 3e18, ZERO_EX_SWAP_DATA), 5e6);"
+            abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
+            "calldata is Multicall.run([approveAndSwapAddress, quotePayAddress], [ApproveAndSwap.run(ZERO_EX_ENTRY_POINT, USDC_1, 9000e6, WETH_1, 3e18, ZERO_EX_SWAP_DATA), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 5e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 3 days, "expiry is current blockTimestamp + 3 days"
@@ -673,12 +669,12 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testBridgeSwapWithPaycallSucceeds() public {
+    function testBridgeSwapWithQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e6});
         maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 1e6});
-        // Note: There are 2000e6 USDC on each chain, so the Builder should attempt to bridge 1000 + 1 (for payment) USDC to chain 8453
+        // Note: There are 2000e6 USDC on each chain, so the Builder should attempt to bridge 1000 USDC to chain 8453
         QuarkBuilder.BuilderResult memory result = builder.swap(
             buyWeth_(8453, usdc_(8453), 3000e6, 1e18, address(0xb0b), BLOCK_TIMESTAMP), // swap 3000 USDC on chain 8453 to 1 WETH
             chainAccountsList_(4000e6), // holding 4000 USDC in total across chains 1, 8453
@@ -686,13 +682,9 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         );
 
         address approveAndSwapAddress = CodeJarHelper.getCodeAddress(type(ApproveAndSwap).creationCode);
-        address paycallAddress = CodeJarHelper.getCodeAddress(
-            abi.encodePacked(type(Paycall).creationCode, abi.encode(ETH_USD_PRICE_FEED_1, USDC_1))
-        );
-        address paycallAddressBase = CodeJarHelper.getCodeAddress(
-            abi.encodePacked(type(Paycall).creationCode, abi.encode(ETH_USD_PRICE_FEED_8453, USDC_8453))
-        );
         address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);
+        address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
+        address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
         assertEq(result.paymentCurrency, "usdc", "usdc currency");
 
@@ -700,25 +692,26 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations.length, 2, "two operations");
         assertEq(
             result.quarkOperations[0].scriptAddress,
-            paycallAddress,
-            "script address[0] has been wrapped with paycall address"
+            multicallAddress,
+            "script address[0] has been wrapped with multicall address"
         );
+        address[] memory callContracts = new address[](2);
+        callContracts[0] = cctpBridgeActionsAddress;
+        callContracts[1] = quotePayAddress;
+        bytes[] memory callDatas = new bytes[](2);
+        callDatas[0] = abi.encodeWithSelector(
+            CCTPBridgeActions.bridgeUSDC.selector,
+            address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155),
+            1000e6,
+            6,
+            bytes32(uint256(uint160(0xb0b))),
+            usdc_(1)
+        );
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 6e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                cctpBridgeActionsAddress,
-                abi.encodeWithSelector(
-                    CCTPBridgeActions.bridgeUSDC.selector,
-                    address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155),
-                    1001e6,
-                    6,
-                    bytes32(uint256(uint160(0xb0b))),
-                    usdc_(1)
-                ),
-                5e6
-            ),
-            "calldata is Paycall.run(CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2.1e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1))), 5e5);"
+            abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
+            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 1000e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1))), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 6e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -726,28 +719,13 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations[0].nonce, ALICE_DEFAULT_SECRET, "unexpected nonce");
         assertEq(result.quarkOperations[0].isReplayable, false, "isReplayable is false");
 
-        assertEq(
-            result.quarkOperations[1].scriptAddress,
-            paycallAddressBase,
-            "script address[1] has been wrapped with paycall address"
-        );
+        assertEq(result.quarkOperations[1].scriptAddress, approveAndSwapAddress, "script address[1] is correct");
         assertEq(
             result.quarkOperations[1].scriptCalldata,
             abi.encodeWithSelector(
-                Paycall.run.selector,
-                approveAndSwapAddress,
-                abi.encodeWithSelector(
-                    ApproveAndSwap.run.selector,
-                    ZERO_EX_ENTRY_POINT,
-                    USDC_8453,
-                    3000e6,
-                    WETH_8453,
-                    1e18,
-                    ZERO_EX_SWAP_DATA
-                ),
-                1e6
+                ApproveAndSwap.run.selector, ZERO_EX_ENTRY_POINT, USDC_8453, 3000e6, WETH_8453, 1e18, ZERO_EX_SWAP_DATA
             ),
-            "calldata is Paycall.run(ApproveAndSwap.run(ZERO_EX_ENTRY_POINT, USDC_8453, 3500e6, WETH_8453, 1e18, ZERO_EX_SWAP_DATA), 5e6);"
+            "calldata is ApproveAndSwap.run(ZERO_EX_ENTRY_POINT, USDC_8453, 3500e6, WETH_8453, 1e18, ZERO_EX_SWAP_DATA);"
         );
         assertEq(
             result.quarkOperations[1].expiry, BLOCK_TIMESTAMP + 3 days, "expiry is current blockTimestamp + 3 days"
@@ -772,8 +750,8 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
                     price: USDC_PRICE,
                     token: USDC_1,
                     assetSymbol: "USDC",
-                    inputAmount: 1001e6,
-                    outputAmount: 1001e6,
+                    inputAmount: 1000e6,
+                    outputAmount: 1000e6,
                     chainId: 1,
                     recipient: address(0xb0b),
                     destinationChainId: 8453,
@@ -819,7 +797,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testBridgeSwapMaxWithQuotecallSucceeds() public {
+    function testBridgeSwapMaxWithQuotePaySucceeds() public {
         QuarkBuilder builder = new QuarkBuilder();
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e6});
@@ -831,13 +809,9 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         );
 
         address approveAndSwapAddress = CodeJarHelper.getCodeAddress(type(ApproveAndSwap).creationCode);
-        address quotecallAddress = CodeJarHelper.getCodeAddress(
-            abi.encodePacked(type(Quotecall).creationCode, abi.encode(ETH_USD_PRICE_FEED_1, USDC_1))
-        );
-        address quotecallAddressBase = CodeJarHelper.getCodeAddress(
-            abi.encodePacked(type(Quotecall).creationCode, abi.encode(ETH_USD_PRICE_FEED_8453, USDC_8453))
-        );
         address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);
+        address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
+        address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
         assertEq(result.paymentCurrency, "usdc", "usdc currency");
 
@@ -845,25 +819,27 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations.length, 2, "two operations");
         assertEq(
             result.quarkOperations[0].scriptAddress,
-            quotecallAddress,
-            "script address[0] has been wrapped with quotecall address"
+            multicallAddress,
+            "script address[0] has been wrapped with multicall address"
         );
+        // Max swap amount should be 6010e6 - 6e6 (cost) = 6004e6, which means we bridge over 2999e6 (chain 8453 already has 3005e6, so only needs 2999e6 more)
+        address[] memory callContracts = new address[](2);
+        callContracts[0] = cctpBridgeActionsAddress;
+        callContracts[1] = quotePayAddress;
+        bytes[] memory callDatas = new bytes[](2);
+        callDatas[0] = abi.encodeWithSelector(
+            CCTPBridgeActions.bridgeUSDC.selector,
+            address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155),
+            2999e6,
+            6,
+            bytes32(uint256(uint160(0xb0b))),
+            usdc_(1)
+        );
+        callDatas[1] = abi.encodeWithSelector(QuotePay.pay.selector, Actions.QUOTE_PAY_RECIPIENT, USDC_1, 6e6, QUOTE_ID);
         assertEq(
             result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Quotecall.run.selector,
-                cctpBridgeActionsAddress,
-                abi.encodeWithSelector(
-                    CCTPBridgeActions.bridgeUSDC.selector,
-                    address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155),
-                    3000e6,
-                    6,
-                    bytes32(uint256(uint160(0xb0b))),
-                    usdc_(1)
-                ),
-                5e6
-            ),
-            "calldata is Quotecall.run(CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 3000e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1))), 5e5);"
+            abi.encodeWithSelector(Multicall.run.selector, callContracts, callDatas),
+            "calldata is Multicall.run([cctpBridgeActionsAddress, quotePayAddress], [CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 2999e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1))), QuotePay.pay(Actions.QUOTE_PAY_RECIPIENT), USDC_1, 6e6, QUOTE_ID)]);"
         );
         assertEq(
             result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
@@ -871,28 +847,13 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         assertEq(result.quarkOperations[0].nonce, ALICE_DEFAULT_SECRET, "unexpected nonce");
         assertEq(result.quarkOperations[0].isReplayable, false, "isReplayable is false");
 
-        assertEq(
-            result.quarkOperations[1].scriptAddress,
-            quotecallAddressBase,
-            "script address[1] has been wrapped with quotecall address"
-        );
+        assertEq(result.quarkOperations[1].scriptAddress, approveAndSwapAddress, "script address[1] is correct");
         assertEq(
             result.quarkOperations[1].scriptCalldata,
             abi.encodeWithSelector(
-                Quotecall.run.selector,
-                approveAndSwapAddress,
-                abi.encodeWithSelector(
-                    ApproveAndSwap.run.selector,
-                    ZERO_EX_ENTRY_POINT,
-                    USDC_8453,
-                    6004e6,
-                    WETH_8453,
-                    2e18,
-                    ZERO_EX_SWAP_DATA
-                ),
-                1e6
+                ApproveAndSwap.run.selector, ZERO_EX_ENTRY_POINT, USDC_8453, 6004e6, WETH_8453, 2e18, ZERO_EX_SWAP_DATA
             ),
-            "calldata is Quotecall.run(ApproveAndSwap.run(ZERO_EX_ENTRY_POINT, USDC_8453, 3500e6, WETH_8453, 1e18, ZERO_EX_SWAP_DATA), 5e6);"
+            "calldata is ApproveAndSwap.run(ZERO_EX_ENTRY_POINT, USDC_8453, 3500e6, WETH_8453, 1e18, ZERO_EX_SWAP_DATA);"
         );
         assertEq(
             result.quarkOperations[1].expiry, BLOCK_TIMESTAMP + 3 days, "expiry is current blockTimestamp + 3 days"
@@ -917,8 +878,8 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
                     price: USDC_PRICE,
                     token: USDC_1,
                     assetSymbol: "USDC",
-                    inputAmount: 3000e6,
-                    outputAmount: 3000e6,
+                    inputAmount: 2999e6,
+                    outputAmount: 2999e6,
                     chainId: 1,
                     recipient: address(0xb0b),
                     destinationChainId: 8453,
@@ -964,183 +925,20 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
     }
 
-    function testBridgeSwapBridgesPaymentToken() public {
-        QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 3500e6});
-        // Note: There are 3000e6 USDC on each chain, so the Builder should attempt to bridge 500 USDC to chain 8453 to cover the max cost
-        QuarkBuilder.BuilderResult memory result = builder.swap(
-            buyWeth_(8453, usdt_(8453), 3000e6, 1e18, address(0xb0b), BLOCK_TIMESTAMP), // swap 3000 USDT on chain 8453 to 1 WETH
-            chainAccountsList_(6000e6), // holding 6000 USDC and USDT in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
-        );
-
-        address approveAndSwapAddress = CodeJarHelper.getCodeAddress(type(ApproveAndSwap).creationCode);
-        address paycallAddress = CodeJarHelper.getCodeAddress(
-            abi.encodePacked(type(Paycall).creationCode, abi.encode(ETH_USD_PRICE_FEED_1, USDC_1))
-        );
-        address paycallAddressBase = CodeJarHelper.getCodeAddress(
-            abi.encodePacked(type(Paycall).creationCode, abi.encode(ETH_USD_PRICE_FEED_8453, USDC_8453))
-        );
-        address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);
-
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
-
-        // Check the quark operations
-        assertEq(result.quarkOperations.length, 2, "two operations");
-        assertEq(
-            result.quarkOperations[0].scriptAddress,
-            paycallAddress,
-            "script address[0] has been wrapped with paycall address"
-        );
-        assertEq(
-            result.quarkOperations[0].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                cctpBridgeActionsAddress,
-                abi.encodeWithSelector(
-                    CCTPBridgeActions.bridgeUSDC.selector,
-                    address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155),
-                    500e6,
-                    6,
-                    bytes32(uint256(uint160(0xb0b))),
-                    usdc_(1)
-                ),
-                5e6
-            ),
-            "calldata is Paycall.run(CCTPBridgeActions.bridgeUSDC(address(0xBd3fa81B58Ba92a82136038B25aDec7066af3155), 500e6, 6, bytes32(uint256(uint160(0xb0b))), usdc_(1))), 5e6);"
-        );
-        assertEq(
-            result.quarkOperations[0].expiry, BLOCK_TIMESTAMP + 7 days, "expiry is current blockTimestamp + 7 days"
-        );
-        assertEq(result.quarkOperations[0].nonce, ALICE_DEFAULT_SECRET, "unexpected nonce");
-        assertEq(result.quarkOperations[0].isReplayable, false, "isReplayable is false");
-
-        assertEq(
-            result.quarkOperations[1].scriptCalldata,
-            abi.encodeWithSelector(
-                Paycall.run.selector,
-                approveAndSwapAddress,
-                abi.encodeWithSelector(
-                    ApproveAndSwap.run.selector,
-                    ZERO_EX_ENTRY_POINT,
-                    USDT_8453,
-                    3000e6,
-                    WETH_8453,
-                    1e18,
-                    ZERO_EX_SWAP_DATA
-                ),
-                3500e6
-            ),
-            "calldata is Paycall.run(ApproveAndSwap.run(ZERO_EX_ENTRY_POINT, USDT_8453, 3500e6, WETH_8453, 1e18, ZERO_EX_SWAP_DATA), 3500e6);"
-        );
-        assertEq(
-            result.quarkOperations[1].scriptAddress,
-            paycallAddressBase,
-            "script address[1] has been wrapped with paycall address"
-        );
-        assertEq(
-            result.quarkOperations[1].expiry, BLOCK_TIMESTAMP + 3 days, "expiry is current blockTimestamp + 3 days"
-        );
-        assertEq(result.quarkOperations[1].nonce, BOB_DEFAULT_SECRET, "unexpected nonce");
-        assertEq(result.quarkOperations[1].isReplayable, false, "isReplayable is false");
-
-        // Check the actions
-        assertEq(result.actions.length, 2, "one action");
-        assertEq(result.actions[0].chainId, 1, "operation is on chainid 1");
-        assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce sends the funds");
-        assertEq(result.actions[0].actionType, "BRIDGE", "action type is 'BRIDGE'");
-        assertEq(result.actions[0].paymentMethod, "PAY_CALL", "payment method is 'PAY_CALL'");
-        assertEq(result.actions[0].paymentToken, USDC_1, "payment token is USDC on mainnet");
-        assertEq(result.actions[0].paymentMaxCost, 5e6, "payment should have max cost of 5e6");
-        assertEq(result.actions[0].nonceSecret, ALICE_DEFAULT_SECRET, "unexpected nonce secret");
-        assertEq(result.actions[0].totalPlays, 1, "total plays is 1");
-        assertEq(
-            result.actions[0].actionContext,
-            abi.encode(
-                Actions.BridgeActionContext({
-                    price: USDC_PRICE,
-                    token: USDC_1,
-                    assetSymbol: "USDC",
-                    inputAmount: 500e6,
-                    outputAmount: 500e6,
-                    chainId: 1,
-                    recipient: address(0xb0b),
-                    destinationChainId: 8453,
-                    bridgeType: Actions.BRIDGE_TYPE_CCTP
-                })
-            ),
-            "action context encoded from BridgeActionContext"
-        );
-        assertEq(result.actions[1].chainId, 8453, "operation is on chainid 8453");
-        assertEq(result.actions[1].quarkAccount, address(0xb0b), "0xb0b sends the funds");
-        assertEq(result.actions[1].actionType, "SWAP", "action type is 'SWAP'");
-        assertEq(result.actions[1].paymentMethod, "PAY_CALL", "payment method is 'PAY_CALL'");
-        assertEq(result.actions[1].paymentToken, USDC_8453, "payment token is USDC on Base");
-        assertEq(result.actions[1].paymentMaxCost, 3500e6, "payment should have max cost of 3500e6");
-        assertEq(result.actions[1].nonceSecret, BOB_DEFAULT_SECRET, "unexpected nonce secret");
-        assertEq(result.actions[1].totalPlays, 1, "total plays is 1");
-        assertEq(
-            result.actions[1].actionContext,
-            abi.encode(
-                Actions.SwapActionContext({
-                    chainId: 8453,
-                    feeAmount: 10,
-                    feeAssetSymbol: "WETH",
-                    feeToken: WETH_8453,
-                    feeTokenPrice: WETH_PRICE,
-                    inputToken: USDT_8453,
-                    inputTokenPrice: USDT_PRICE,
-                    inputAssetSymbol: "USDT",
-                    inputAmount: 3000e6,
-                    outputToken: WETH_8453,
-                    outputTokenPrice: WETH_PRICE,
-                    outputAssetSymbol: "WETH",
-                    outputAmount: 1e18,
-                    isExactOut: false
-                })
-            ),
-            "action context encoded from SwapActionContext"
-        );
-        // TODO: Check the contents of the EIP712 data
-        assertNotEq(result.eip712Data.digest, hex"", "non-empty digest");
-        assertNotEq(result.eip712Data.domainSeparator, hex"", "non-empty domain separator");
-        assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
-    }
-
     function testIgnoresChainIfMaxCostIsNotSpecified() public {
         QuarkBuilder builder = new QuarkBuilder();
         PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
         maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 1e6});
 
         // Note: There are 2000e6 USDC on each chain, so the Builder should attempt to bridge 1001 USDC to chain 8453.
-        // The extra 1 USDC is to cover the payment max cost on chain 8453.
         // However, max cost is not specified for chain 1, so the Builder will ignore the chain and revert because
         // there will be insufficient funds for the transfer.
 
         // The `FundsAvailable` error tells us that 3000 USDC was asked to be swap, but only 1999 USDC was available.
-        // (1999 USDC instead of 2000 USDC because 1 USDC is reserved for the payment max cost)
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 3000e6, 1999e6));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 3000e6, 2000e6));
         builder.swap(
             buyWeth_(8453, usdc_(8453), 3000e6, 1e18, address(0xc0b), BLOCK_TIMESTAMP), // swap 3000 USDC on chain 8453 to 1 WETH
             chainAccountsList_(4000e6), // holding 4000 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
-        );
-    }
-
-    function testRevertsIfNotEnoughFundsToBridge() public {
-        QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 3000e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 3001e6});
-
-        // Note: Need to bridge 1 USDC to cover max cost on chain 8453, but there is 0 available to bridge from chain 1 because they
-        // are all reserved for the max cost on chain 1.
-        vm.expectRevert(abi.encodeWithSelector(Actions.NotEnoughFundsToBridge.selector, "usdc", 1e6, 1e6));
-        builder.swap(
-            buyWeth_(8453, usdt_(8453), 3000e6, 1e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 3000 USDT on chain 8453 to 1 WETH
-            chainAccountsList_(6000e6), // holding 6000 USDT in total across chains 1, 8453
             paymentUsdc_(maxCosts)
         );
     }

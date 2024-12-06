@@ -68,7 +68,7 @@ contract QuotePayTest is Test {
         QuarkWallet.QuarkOperation memory op = new QuarkOperationHelper().newBasicOpWithCalldata(
             wallet,
             quotePay,
-            abi.encodeWithSelector(QuotePay.run.selector, payee, USDC, 10e6, QUOTE_ID),
+            abi.encodeWithSelector(QuotePay.pay.selector, payee, USDC, 10e6, QUOTE_ID),
             ScriptType.ScriptSource
         );
         bytes memory signature = new SignatureHelper().signOp(alicePrivateKey, wallet, op);
@@ -94,7 +94,7 @@ contract QuotePayTest is Test {
         QuarkWallet.QuarkOperation memory op = new QuarkOperationHelper().newBasicOpWithCalldata(
             wallet,
             quotePay,
-            abi.encodeWithSelector(QuotePay.run.selector, payee, USDT, 10e6, QUOTE_ID),
+            abi.encodeWithSelector(QuotePay.pay.selector, payee, USDT, 10e6, QUOTE_ID),
             ScriptType.ScriptSource
         );
         bytes memory signature = new SignatureHelper().signOp(alicePrivateKey, wallet, op);
@@ -119,7 +119,7 @@ contract QuotePayTest is Test {
         QuarkWallet.QuarkOperation memory op = new QuarkOperationHelper().newBasicOpWithCalldata(
             wallet,
             quotePay,
-            abi.encodeWithSelector(QuotePay.run.selector, payee, WBTC, 30e3, QUOTE_ID),
+            abi.encodeWithSelector(QuotePay.pay.selector, payee, WBTC, 30e3, QUOTE_ID),
             ScriptType.ScriptSource
         );
         bytes memory signature = new SignatureHelper().signOp(alicePrivateKey, wallet, op);
@@ -142,7 +142,7 @@ contract QuotePayTest is Test {
         QuarkWallet.QuarkOperation memory op = new QuarkOperationHelper().newBasicOpWithCalldata(
             wallet,
             quotePay,
-            abi.encodeWithSelector(QuotePay.run.selector, payee, USDC, 10e6, QUOTE_ID),
+            abi.encodeWithSelector(QuotePay.pay.selector, payee, USDC, 10e6, QUOTE_ID),
             ScriptType.ScriptSource
         );
         bytes memory signature = new SignatureHelper().signOp(alicePrivateKey, wallet, op);

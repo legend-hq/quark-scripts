@@ -10,6 +10,7 @@ import {Paycall} from "src/Paycall.sol";
 import {Quotecall} from "src/Quotecall.sol";
 import {PaymentInfo} from "src/builder/PaymentInfo.sol";
 import {QuarkBuilder} from "src/builder/QuarkBuilder.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 import {Strings} from "src/builder/Strings.sol";
 import {MorphoInfo} from "src/builder/MorphoInfo.sol";
 import {Arrays} from "test/builder/lib/Arrays.sol";
@@ -59,6 +60,8 @@ contract QuarkBuilderTest {
     bytes32 constant BOB_DEFAULT_SECRET = bytes32(uint256(2));
     bytes32 constant COB_DEFAULT_SECRET = bytes32(uint256(5));
 
+    bytes32 constant QUOTE_ID = bytes32("QUOTE_ID");
+
     /**
      *
      * Fixture Functions
@@ -76,7 +79,7 @@ contract QuarkBuilderTest {
         pure
         returns (PaymentInfo.Payment memory)
     {
-        return PaymentInfo.Payment({isToken: true, currency: "usdc", maxCosts: maxCosts});
+        return PaymentInfo.Payment({isToken: true, currency: "usdc", quoteId: QUOTE_ID, maxCosts: maxCosts});
     }
 
     function paymentUsd_() internal pure returns (PaymentInfo.Payment memory) {
@@ -88,7 +91,52 @@ contract QuarkBuilderTest {
         pure
         returns (PaymentInfo.Payment memory)
     {
-        return PaymentInfo.Payment({isToken: false, currency: "usd", maxCosts: maxCosts});
+        return PaymentInfo.Payment({isToken: false, currency: "usd", quoteId: bytes32(""), maxCosts: maxCosts});
+    }
+
+    function quote_() internal pure returns (Quotes.Quote memory) {
+        Quotes.NetworkOperationFee memory networkOperationFeeBase =
+            Quotes.NetworkOperationFee({chainId: 8453, opType: Quotes.OP_TYPE_BASELINE, price: 3e6});
+
+        Quotes.NetworkOperationFee memory networkOperationFeeMainnet =
+            Quotes.NetworkOperationFee({chainId: 1, opType: Quotes.OP_TYPE_BASELINE, price: 3e8});
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] = networkOperationFeeBase;
+        networkOperationFees[1] = networkOperationFeeMainnet;
+
+        return quote_(networkOperationFees);
+    }
+
+    function quote_(uint256 chainId, uint256 price) internal pure returns (Quotes.Quote memory) {
+        Quotes.NetworkOperationFee memory networkOperationFee =
+            Quotes.NetworkOperationFee({chainId: chainId, opType: Quotes.OP_TYPE_BASELINE, price: price});
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] = networkOperationFee;
+
+        return quote_(networkOperationFees);
+    }
+
+    function quote_(Quotes.NetworkOperationFee[] memory networkOperationFees)
+        internal
+        pure
+        returns (Quotes.Quote memory)
+    {
+        Quotes.AssetQuote memory assetQuoteUsd = Quotes.AssetQuote({symbol: "USD", price: 1e8});
+        Quotes.AssetQuote memory assetQuoteUsdc = Quotes.AssetQuote({symbol: "USDC", price: 1e8});
+
+        Quotes.AssetQuote[] memory assetQuotes = new Quotes.AssetQuote[](2);
+        assetQuotes[0] = assetQuoteUsd;
+        assetQuotes[1] = assetQuoteUsdc;
+
+        return Quotes.Quote({
+            quoteId: QUOTE_ID,
+            issuedAt: 1704067200,
+            expiresAt: 1704069200,
+            assetQuotes: assetQuotes,
+            networkOperationFees: networkOperationFees
+        });
     }
 
     // TODO: refactor
