@@ -119,15 +119,19 @@ library Across {
     uint256 public constant FILL_DEADLINE_BUFFER = 10 minutes;
 
     function knownChains() internal pure returns (AcrossChain[] memory) {
-        AcrossChain[] memory chains = new AcrossChain[](4);
+        AcrossChain[] memory chains = new AcrossChain[](6);
         // Mainnet
         chains[0] = AcrossChain({chainId: 1, bridge: 0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5});
         // Base
         chains[1] = AcrossChain({chainId: 8453, bridge: 0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64});
+        // Arbitrum
+        chains[2] = AcrossChain({chainId: 42161, bridge: 0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A});
         // Sepolia
-        chains[2] = AcrossChain({chainId: 11155111, bridge: 0x5ef6C01E11889d86803e0B23e3cB3F9E9d97B662});
+        chains[3] = AcrossChain({chainId: 11155111, bridge: 0x5ef6C01E11889d86803e0B23e3cB3F9E9d97B662});
         // Base Sepolia
-        chains[3] = AcrossChain({chainId: 84532, bridge: 0x82B564983aE7274c86695917BBf8C99ECb6F0F8F});
+        chains[4] = AcrossChain({chainId: 84532, bridge: 0x82B564983aE7274c86695917BBf8C99ECb6F0F8F});
+        // Arbitrum Sepolia
+        chains[5] = AcrossChain({chainId: 84532, bridge: 0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A});
         return chains;
     }
 
