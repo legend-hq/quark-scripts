@@ -16,12 +16,21 @@ import {Multicall} from "src/Multicall.sol";
 import {Quotecall} from "src/Quotecall.sol";
 import {WrapperActions} from "src/WrapperScripts.sol";
 import {QuotePay} from "src/QuotePay.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 
 contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
     address constant COMET = address(0xc3d688B66703497DAA19211EEdff47f25384cdc3);
     address constant COMET_ETH = address(0xA17581A9E3356d9A858b789D68B4d866e593aE94);
 
     function cometWethSupply_(uint256 chainId, uint256 amount)
+        internal
+        pure
+        returns (CometActionsBuilder.CometSupplyIntent memory)
+    {
+        return cometWethSupply_(chainId, amount);
+    }
+
+    function cometWethSupply_(uint256 chainId, uint256 amount, string memory paymentAssetSymbol)
         internal
         pure
         returns (CometActionsBuilder.CometSupplyIntent memory)
@@ -33,7 +42,8 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
             chainId: chainId,
             comet: COMET_ETH,
             sender: address(0xa11ce),
-            preferAcross: false
+            preferAcross: false,
+            paymentAssetSymbol: paymentAssetSymbol
         });
     }
 
@@ -42,10 +52,18 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         pure
         returns (CometActionsBuilder.CometSupplyIntent memory)
     {
-        return cometSupply_(chainId, amount, address(0xa11ce));
+        return cometSupply_(chainId, amount, address(0xa11ce), "USDC");
     }
 
-    function cometSupply_(uint256 chainId, uint256 amount, address sender)
+    function cometSupply_(uint256 chainId, uint256 amount, string memory paymentAssetSymbol)
+        internal
+        pure
+        returns (CometActionsBuilder.CometSupplyIntent memory)
+    {
+        return cometSupply_(chainId, amount, address(0xa11ce), paymentAssetSymbol);
+    }
+
+    function cometSupply_(uint256 chainId, uint256 amount, address sender, string memory paymentAssetSymbol)
         internal
         pure
         returns (CometActionsBuilder.CometSupplyIntent memory)
@@ -57,7 +75,8 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
             chainId: chainId,
             comet: COMET,
             sender: sender,
-            preferAcross: false
+            preferAcross: false,
+            paymentAssetSymbol: paymentAssetSymbol
         });
     }
 
@@ -65,19 +84,19 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 2e6, 0e6));
         builder.cometSupply(
-            cometSupply_(1, 2e6),
+            cometSupply_(1, 2e6, "USD"),
             chainAccountsList_(0e6), // but we are holding 0 USDC in total across 1, 8453
-            paymentUsd_()
+            quote_()
         );
     }
 
     function testCometSupplyMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "USDC"));
         builder.cometSupply(
             cometSupply_(1, 1e6),
             chainAccountsList_(2e6), // holding 2 USDC in total across 1, 8453
-            paymentUsdc_(maxCosts_(1, 1_000e6)) // but costs 1,000 USDC
+            quote_(1, 1_000e8) // but costs $1,000
         );
     }
 
@@ -86,21 +105,21 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 2e6, 0));
         builder.cometSupply(
             // there is no bridge to chain 7777, so we cannot get to our funds
-            cometSupply_(7777, 2e6), // transfer 2 USDC on chain 7777 to 0xc0b
+            cometSupply_(7777, 2e6, "USD"), // transfer 2 USDC on chain 7777 to 0xc0b
             chainAccountsList_(3e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
     }
 
     function testSimpleCometSupply() public {
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.cometSupply(
-            cometSupply_(1, 1e6),
+            cometSupply_(1, 1e6, "USD"),
             chainAccountsList_(3e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -177,12 +196,12 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         });
 
         QuarkBuilder.BuilderResult memory result = builder.cometSupply(
-            cometSupply_(1, type(uint256).max),
+            cometSupply_(1, type(uint256).max, "USD"),
             chainAccountsList, // holding 3 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -283,9 +302,9 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         });
 
         QuarkBuilder.BuilderResult memory result =
-            builder.cometSupply(cometWethSupply_(1, 1e18), chainAccountsList, paymentUsd_());
+            builder.cometSupply(cometWethSupply_(1, 1e18, "USD"), chainAccountsList, quote_());
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address wrapperActionsAddress = CodeJarHelper.getCodeAddress(type(WrapperActions).creationCode);
@@ -346,19 +365,17 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
 
     function testCometSupplyWithQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
         QuarkBuilder.BuilderResult memory result = builder.cometSupply(
             cometSupply_(1, 1e6),
             chainAccountsList_(3e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
+            quote_(1, 0.1e8)
         );
 
         address cometSupplyActionsAddress = CodeJarHelper.getCodeAddress(type(CometSupplyActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -437,12 +454,12 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.cometSupply(
             // We need to set Bob as the sender because only he has an account on chain 8453
-            cometSupply_(8453, 5e6, address(0xb0b)),
+            cometSupply_(8453, 5e6, address(0xb0b), "USD"),
             chainAccountsList_(6e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         // first operation
@@ -579,12 +596,12 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.cometSupply(
             // We need to set Bob as the sender because only he has an account on chain 8453
-            cometSupply_(8453, type(uint256).max, address(0xb0b)),
+            cometSupply_(8453, type(uint256).max, address(0xb0b), "USD"),
             chainAccountsList_(6e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         // first operation
@@ -718,16 +735,20 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
 
     function testCometSupplyMaxWithBridgeAndQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.1e6});
+        Quotes.NetworkOperationFee memory networkOperationFeeBase =
+            Quotes.NetworkOperationFee({chainId: 8453, opType: Quotes.OP_TYPE_BASELINE, price: 0.1e8});
+        Quotes.NetworkOperationFee memory networkOperationFeeMainnet =
+            Quotes.NetworkOperationFee({chainId: 1, opType: Quotes.OP_TYPE_BASELINE, price: 0.5e8});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] = networkOperationFeeBase;
+        networkOperationFees[1] = networkOperationFeeMainnet;
 
         // Note: There are 3e6 USDC on each chain, so the Builder should attempt to bridge 2 USDC to chain 8453
         QuarkBuilder.BuilderResult memory result = builder.cometSupply(
             // We need to set Bob as the sender because only he has an account on chain 8453
-            cometSupply_(8453, type(uint256).max, address(0xb0b)),
+            cometSupply_(8453, type(uint256).max, address(0xb0b), "USDC"),
             chainAccountsList_(6e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address cometSupplyActionsAddress = CodeJarHelper.getCodeAddress(type(CometSupplyActions).creationCode);
@@ -735,7 +756,7 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usd currency");
+        assertEq(result.paymentCurrency, "USDC", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 2, "two operations");
@@ -844,16 +865,20 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
 
     function testCometSupplyWithBridgeAndQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.1e6});
+        Quotes.NetworkOperationFee memory networkOperationFeeBase =
+            Quotes.NetworkOperationFee({chainId: 8453, opType: Quotes.OP_TYPE_BASELINE, price: 0.1e8});
+        Quotes.NetworkOperationFee memory networkOperationFeeMainnet =
+            Quotes.NetworkOperationFee({chainId: 1, opType: Quotes.OP_TYPE_BASELINE, price: 0.5e8});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] = networkOperationFeeBase;
+        networkOperationFees[1] = networkOperationFeeMainnet;
 
         // Note: There are 3e6 USDC on each chain, so the Builder should attempt to bridge 2 USDC to chain 8453
         QuarkBuilder.BuilderResult memory result = builder.cometSupply(
             // We need to set Bob as the sender because only he has an account on chain 8453
-            cometSupply_(8453, 5e6, address(0xb0b)),
+            cometSupply_(8453, 5e6, address(0xb0b), "USDC"),
             chainAccountsList_(6e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address cometSupplyActionsAddress = CodeJarHelper.getCodeAddress(type(CometSupplyActions).creationCode);
@@ -861,7 +886,7 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usd currency");
+        assertEq(result.paymentCurrency, "USDC", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 2, "two operations");
