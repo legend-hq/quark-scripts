@@ -437,7 +437,7 @@ contract QuarkBuilderBase {
         HashMap.Map memory assetsInPerChain = HashMap.newMap();
         HashMap.Map memory assetsOutPerChain = HashMap.newMap();
 
-        string memory paymentTokenSymbol = args.actions[0].paymentTokenSymbol; // assumes all actions use the same payment token
+        string memory paymentTokenSymbol = args.payment.currency;
         for (uint256 i = 0; i < args.actions.length; ++i) {
             Actions.Action memory action = args.actions[i];
 
@@ -453,6 +453,7 @@ contract QuarkBuilderBase {
                 action: action,
                 actionIntent: args.actionIntent,
                 chainAccountsList: args.chainAccountsList,
+                paymentTokenSymbol: paymentTokenSymbol,
                 account: args.account
             });
         }
@@ -560,7 +561,7 @@ contract QuarkBuilderBase {
         HashMap.Map memory assetsInPerChain = HashMap.newMap();
         HashMap.Map memory assetsOutPerChain = HashMap.newMap();
 
-        string memory paymentTokenSymbol = args.actions[0].paymentTokenSymbol; // assumes all actions use the same payment token
+        string memory paymentTokenSymbol = args.payment.currency;
         for (uint256 i = 0; i < args.actions.length; ++i) {
             Actions.Action memory action = args.actions[i];
 
@@ -570,6 +571,7 @@ contract QuarkBuilderBase {
                 action: action,
                 actionIntent: args.actionIntent,
                 chainAccountsList: args.chainAccountsList,
+                paymentTokenSymbol: paymentTokenSymbol,
                 account: args.account
             });
         }
@@ -613,10 +615,9 @@ contract QuarkBuilderBase {
         Actions.Action memory action,
         ActionIntent memory actionIntent,
         Accounts.ChainAccounts[] memory chainAccountsList,
+        string memory paymentTokenSymbol,
         address account
     ) internal pure {
-        string memory paymentTokenSymbol = action.paymentTokenSymbol;
-
         // Depending on the action type, update the `assetsInPerChain` and/or `assetsOutPerChain` maps
         if (Strings.stringEqIgnoreCase(action.actionType, Actions.ACTION_TYPE_BRIDGE)) {
             Actions.BridgeActionContext memory bridgeActionContext =
