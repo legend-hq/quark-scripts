@@ -27,22 +27,41 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
             amount: amount,
             assetSymbol: assetSymbol,
             chainId: chainId,
-            withdrawer: address(0xa11ce)
+            withdrawer: address(0xa11ce),
+            paymentAssetSymbol: "USDC"
         });
     }
 
-    function morphoWithdrawIntent_(uint256 chainId, uint256 amount, string memory assetSymbol, address withdrawer)
-        internal
-        pure
-        returns (MorphoVaultActionsBuilder.MorphoVaultWithdrawIntent memory)
-    {
+    function morphoWithdrawIntent_(
+        uint256 chainId,
+        uint256 amount,
+        string memory assetSymbol,
+        string memory paymentAssetSymbol
+    ) internal pure returns (MorphoVaultActionsBuilder.MorphoVaultWithdrawIntent memory) {
+        return morphoWithdrawIntent_({
+            amount: amount,
+            assetSymbol: assetSymbol,
+            chainId: chainId,
+            withdrawer: address(0xa11ce),
+            paymentAssetSymbol: paymentAssetSymbol
+        });
+    }
+
+    function morphoWithdrawIntent_(
+        uint256 chainId,
+        uint256 amount,
+        string memory assetSymbol,
+        address withdrawer,
+        string memory paymentAssetSymbol
+    ) internal pure returns (MorphoVaultActionsBuilder.MorphoVaultWithdrawIntent memory) {
         return MorphoVaultActionsBuilder.MorphoVaultWithdrawIntent({
             amount: amount,
             assetSymbol: assetSymbol,
             blockTimestamp: BLOCK_TIMESTAMP,
             chainId: chainId,
             withdrawer: withdrawer,
-            preferAcross: false
+            preferAcross: false,
+            paymentAssetSymbol: paymentAssetSymbol
         });
     }
 
@@ -51,12 +70,12 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
     function testMorphoVaultWithdraw() public {
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.morphoVaultWithdraw(
-            morphoWithdrawIntent_(1, 2e6, "USDC"),
+            morphoWithdrawIntent_(1, 2e6, "USDC", "USD"),
             chainAccountsList_(2e6), // holding 2 USDC in total across 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -107,17 +126,15 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
 
     function testMorphoVaultWithdrawWithQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
         QuarkBuilder.BuilderResult memory result = builder.morphoVaultWithdraw(
-            morphoWithdrawIntent_(1, 2e6, "USDC"), chainAccountsList_(3e6), paymentUsdc_(maxCosts)
+            morphoWithdrawIntent_(1, 2e6, "USDC"), chainAccountsList_(3e6), quote_(1, 0.1e8)
         );
 
         address morphoVaultActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoVaultActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -192,17 +209,14 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
 
     function testMorphoVaultWithdrawPayFromWithdraw() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6}); // action costs .5 USDC
-        QuarkBuilder.BuilderResult memory result = builder.morphoVaultWithdraw(
-            morphoWithdrawIntent_(1, 2e6, "USDC"), chainAccountsList_(0), paymentUsdc_(maxCosts)
-        );
+        QuarkBuilder.BuilderResult memory result =
+            builder.morphoVaultWithdraw(morphoWithdrawIntent_(1, 2e6, "USDC"), chainAccountsList_(0), quote_(1, 0.5e8));
 
         address morphoVaultActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoVaultActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -261,9 +275,6 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
     }
 
     function testMorphoVaultWithdrawMax() public {
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
-
         MorphoVaultPortfolio[] memory morphoVaultPortfolios = new MorphoVaultPortfolio[](1);
         morphoVaultPortfolios[0] = MorphoVaultPortfolio({
             assetSymbol: "USDC",
@@ -287,14 +298,14 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
         QuarkBuilder.BuilderResult memory result = builder.morphoVaultWithdraw(
             morphoWithdrawIntent_(1, type(uint256).max, "USDC"),
             chainAccountsFromChainPortfolios(chainPortfolios), // user has no assets
-            paymentUsdc_(maxCosts) // but will pay from withdrawn funds
+            quote_(1, 0.1e8) // but will pay from withdrawn funds
         );
 
         address morphoVaultActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoVaultActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -353,9 +364,6 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
     }
 
     function testMorphoVaultWithdrawMaxRevertsMaxCostTooHigh() public {
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 100e6}); // max cost is very high
-
         MorphoVaultPortfolio[] memory morphoVaultPortfolios = new MorphoVaultPortfolio[](1);
         morphoVaultPortfolios[0] = MorphoVaultPortfolio({
             assetSymbol: "USDC",
@@ -377,11 +385,11 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "USDC"));
         builder.morphoVaultWithdraw(
             morphoWithdrawIntent_(1, type(uint256).max, "USDC"),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts) // user will pay for transaction with withdrawn funds, but it is not enough
+            quote_(1, 100e8) // user will pay for transaction with withdrawn funds, but it is not enough
         );
     }
 }
