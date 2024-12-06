@@ -166,8 +166,6 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce sends the funds");
         assertEq(result.actions[0].actionType, "BORROW", "action type is 'BORROW'");
         assertEq(result.actions[0].paymentMethod, "OFFCHAIN", "payment method is 'OFFCHAIN'");
-        assertEq(result.actions[0].paymentToken, address(0), "payment token is null");
-        assertEq(result.actions[0].paymentMaxCost, 0, "payment has no max cost, since 'OFFCHAIN'");
         assertEq(result.actions[0].nonceSecret, chainPortfolios[0].nonceSecret, "unexpected nonce secret");
         assertEq(result.actions[0].totalPlays, 1, "total plays is 1");
 
@@ -291,8 +289,6 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce sends the funds");
         assertEq(result.actions[0].actionType, "BORROW", "action type is 'BORROW'");
         assertEq(result.actions[0].paymentMethod, "OFFCHAIN", "payment method is 'OFFCHAIN'");
-        assertEq(result.actions[0].paymentToken, address(0), "payment token is null");
-        assertEq(result.actions[0].paymentMaxCost, 0, "payment has no max cost, since 'OFFCHAIN'");
         assertEq(result.actions[0].nonceSecret, chainPortfolios[0].nonceSecret, "unexpected nonce secret");
         assertEq(result.actions[0].totalPlays, 1, "total plays is 1");
         assertEq(
@@ -428,8 +424,6 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce sends the funds");
         assertEq(result.actions[0].actionType, "BORROW", "action type is 'BORROW'");
         assertEq(result.actions[0].paymentMethod, "PAY_CALL", "payment method is 'PAY_CALL'");
-        assertEq(result.actions[0].paymentToken, USDC_8453, "payment token is USDC on Base");
-        assertEq(result.actions[0].paymentMaxCost, 1e6, "payment should have max cost of 1e6");
         assertEq(result.actions[0].nonceSecret, chainPortfolios[1].nonceSecret, "unexpected nonce secret");
         assertEq(result.actions[0].totalPlays, 1, "total plays is 1");
         uint256[] memory collateralTokenPrices = new uint256[](1);
@@ -453,14 +447,13 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
             ),
             "action context encoded from BorrowActionContext"
         );
+        assertEq(result.actions[0].quotePayActionContext, "", "no QuotePay action context");
 
         // second action
         assertEq(result.actions[1].chainId, 1, "operation is on chainid 1");
         assertEq(result.actions[1].quarkAccount, address(0xa11ce), "0xa11ce sends the funds");
         assertEq(result.actions[1].actionType, "QUOTE_PAY", "action type is 'QUOTE_PAY'");
         assertEq(result.actions[1].paymentMethod, "QUOTE_CALL", "payment method is 'QUOTE_CALL'");
-        assertEq(result.actions[1].paymentToken, USDC_1, "payment token is USDC on mainnet");
-        assertEq(result.actions[1].paymentMaxCost, 0.1e6, "payment should have max cost of 0.1e6");
         assertEq(result.actions[1].nonceSecret, chainPortfolios[0].nonceSecret, "unexpected nonce secret");
         assertEq(result.actions[1].totalPlays, 1, "total plays is 1");
         assertEq(
@@ -472,7 +465,22 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
                     chainId: 1,
                     price: USDC_PRICE,
                     token: USDC_1,
-                    payee: address(0xa11ce),
+                    payee: Actions.QUOTE_PAY_RECIPIENT,
+                    quoteId: QUOTE_ID
+                })
+            ),
+            "action context encoded from QuotePayActionContext"
+        );
+        assertEq(
+            result.actions[1].quotePayActionContext,
+            abi.encode(
+                Actions.QuotePayActionContext({
+                    amount: 1.1e6,
+                    assetSymbol: "USDC",
+                    chainId: 1,
+                    price: USDC_PRICE,
+                    token: USDC_1,
+                    payee: Actions.QUOTE_PAY_RECIPIENT,
                     quoteId: QUOTE_ID
                 })
             ),
@@ -585,8 +593,6 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce sends the funds");
         assertEq(result.actions[0].actionType, "BORROW", "action type is 'BORROW'");
         assertEq(result.actions[0].paymentMethod, "PAY_CALL", "payment method is 'PAY_CALL'");
-        assertEq(result.actions[0].paymentToken, USDC_1, "payment token is USDC");
-        assertEq(result.actions[0].paymentMaxCost, 1.5e6, "payment max is set to 1.5e6 in this test case");
         assertEq(result.actions[0].nonceSecret, chainPortfolios[0].nonceSecret, "unexpected nonce secret");
         assertEq(result.actions[0].totalPlays, 1, "total plays is 1");
 
@@ -750,8 +756,6 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce sends the funds");
         assertEq(result.actions[0].actionType, "BRIDGE", "action type is 'BRIDGE'");
         assertEq(result.actions[0].paymentMethod, "PAY_CALL", "payment method is 'PAY_CALL'");
-        assertEq(result.actions[0].paymentToken, USDC_1, "payment token is USDC on mainnet");
-        assertEq(result.actions[0].paymentMaxCost, 0.1e6, "payment should have max cost of 0.1e6");
         assertEq(result.actions[0].nonceSecret, chainPortfolios[0].nonceSecret, "unexpected nonce secret");
         assertEq(result.actions[0].totalPlays, 1, "total plays is 1");
         assertEq(
@@ -776,8 +780,6 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         assertEq(result.actions[1].quarkAccount, address(0xa11ce), "0xa11ce sends the funds");
         assertEq(result.actions[1].actionType, "BORROW", "action type is 'BORROW'");
         assertEq(result.actions[1].paymentMethod, "PAY_CALL", "payment method is 'PAY_CALL'");
-        assertEq(result.actions[1].paymentToken, USDC_8453, "payment token is USDC on Base");
-        assertEq(result.actions[1].paymentMaxCost, 0.2e6, "payment should have max cost of 0.2e6");
         assertEq(result.actions[1].nonceSecret, chainPortfolios[1].nonceSecret, "unexpected nonce secret");
         assertEq(result.actions[1].totalPlays, 1, "total plays is 1");
 

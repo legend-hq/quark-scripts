@@ -156,8 +156,6 @@ contract BridgingLogicTest is Test, QuarkBuilderTest {
         assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce sends the funds");
         assertEq(result.actions[0].actionType, "BRIDGE", "action type is 'BRIDGE'");
         assertEq(result.actions[0].paymentMethod, "OFFCHAIN", "payment method is 'OFFCHAIN'");
-        assertEq(result.actions[0].paymentToken, address(0), "payment token is null");
-        assertEq(result.actions[0].paymentMaxCost, 0, "payment has no max cost, since 'OFFCHAIN'");
         assertEq(result.actions[0].nonceSecret, ALICE_DEFAULT_SECRET, "unexpected nonce secret");
         assertEq(result.actions[0].totalPlays, 1, "total plays is 1");
         assertEq(
@@ -182,8 +180,6 @@ contract BridgingLogicTest is Test, QuarkBuilderTest {
         assertEq(result.actions[1].quarkAccount, address(0xb0b), "0xb0b sends the funds");
         assertEq(result.actions[1].actionType, "TRANSFER", "action type is 'TRANSFER'");
         assertEq(result.actions[1].paymentMethod, "OFFCHAIN", "payment method is 'OFFCHAIN'");
-        assertEq(result.actions[1].paymentToken, address(0), "payment token is null");
-        assertEq(result.actions[1].paymentMaxCost, 0, "payment has no max cost, since 'OFFCHAIN'");
         assertEq(result.actions[1].nonceSecret, BOB_DEFAULT_SECRET, "unexpected nonce secret");
         assertEq(result.actions[1].totalPlays, 1, "total plays is 1");
         assertEq(
@@ -315,8 +311,6 @@ contract BridgingLogicTest is Test, QuarkBuilderTest {
         assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce sends the funds");
         assertEq(result.actions[0].actionType, "BRIDGE", "action type is 'BRIDGE'");
         assertEq(result.actions[0].paymentMethod, "OFFCHAIN", "payment method is 'OFFCHAIN'");
-        assertEq(result.actions[0].paymentToken, address(0), "payment token is null");
-        assertEq(result.actions[0].paymentMaxCost, 0, "payment has no max cost, since 'OFFCHAIN'");
         assertEq(result.actions[0].nonceSecret, ALICE_DEFAULT_SECRET, "unexpected nonce secret");
         assertEq(result.actions[0].totalPlays, 1, "total plays is 1");
         assertEq(
@@ -340,8 +334,7 @@ contract BridgingLogicTest is Test, QuarkBuilderTest {
         assertEq(result.actions[1].quarkAccount, address(0xb0b), "0xb0b sends the funds");
         assertEq(result.actions[1].actionType, "TRANSFER", "action type is 'TRANSFER'");
         assertEq(result.actions[1].paymentMethod, "OFFCHAIN", "payment method is 'OFFCHAIN'");
-        assertEq(result.actions[1].paymentToken, address(0), "payment token is null");
-        assertEq(result.actions[1].paymentMaxCost, 0, "payment has no max cost, since 'OFFCHAIN'");
+
         assertEq(result.actions[1].nonceSecret, BOB_DEFAULT_SECRET, "unexpected nonce secret");
         assertEq(result.actions[1].totalPlays, 1, "total plays is 1");
         assertEq(

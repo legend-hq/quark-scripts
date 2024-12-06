@@ -285,14 +285,10 @@ library Actions {
         address quarkAccount;
         string actionType;
         bytes actionContext;
+        // The action context for a QuotePay, if one exists for this operation. Otherwise, empty bytes
+        bytes quotePayActionContext;
         // One of the PaymentInfo.PAYMENT_METHOD_* constants.
         string paymentMethod;
-        // Address of payment token on chainId.
-        // Null address if the payment method was OFFCHAIN.
-        address paymentToken;
-        string paymentTokenSymbol;
-        // TODO: might need to change this/remove this since payment isn't being made on each chain
-        uint256 paymentMaxCost;
         // The secret used to generate the hash chain for a replayable operation. For non-replayable
         // operations, the `nonce` will be the `nonceSecret` (the hash chain has a length of 1)
         bytes32 nonceSecret;
@@ -674,12 +670,8 @@ library Actions {
             quarkAccount: bridge.sender,
             actionType: ACTION_TYPE_BRIDGE,
             actionContext: abi.encode(bridgeActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, useQuotecall),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, bridge.srcChainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, bridge.srcChainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -764,12 +756,8 @@ library Actions {
             quarkAccount: bridge.sender,
             actionType: ACTION_TYPE_BRIDGE,
             actionContext: abi.encode(bridgeActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, useQuotecall),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, bridge.srcChainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, bridge.srcChainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -842,12 +830,8 @@ library Actions {
             quarkAccount: borrowInput.borrower,
             actionType: ACTION_TYPE_BORROW,
             actionContext: abi.encode(borrowActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, false),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, borrowInput.chainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, borrowInput.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -919,12 +903,8 @@ library Actions {
             quarkAccount: repayInput.repayer,
             actionType: ACTION_TYPE_REPAY,
             actionContext: abi.encode(repayActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, false),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, repayInput.chainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, repayInput.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -980,12 +960,8 @@ library Actions {
             quarkAccount: cometSupply.sender,
             actionType: ACTION_TYPE_SUPPLY,
             actionContext: abi.encode(cometSupplyActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, false),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, cometSupply.chainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, cometSupply.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -1042,12 +1018,8 @@ library Actions {
             quarkAccount: cometWithdraw.withdrawer,
             actionType: ACTION_TYPE_WITHDRAW,
             actionContext: abi.encode(cometWithdrawActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, false),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, cometWithdraw.chainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, cometWithdraw.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -1108,12 +1080,8 @@ library Actions {
             quarkAccount: transfer.sender,
             actionType: ACTION_TYPE_TRANSFER,
             actionContext: abi.encode(transferActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, useQuotecall),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, transfer.chainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, transfer.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -1179,12 +1147,8 @@ library Actions {
             quarkAccount: borrowInput.borrower,
             actionType: ACTION_TYPE_MORPHO_BORROW,
             actionContext: abi.encode(borrowActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, false),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, borrowInput.chainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, borrowInput.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -1250,12 +1214,8 @@ library Actions {
             quarkAccount: repayInput.repayer,
             actionType: ACTION_TYPE_MORPHO_REPAY,
             actionContext: abi.encode(morphoRepayActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, false),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, repayInput.chainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, repayInput.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -1311,11 +1271,8 @@ library Actions {
             quarkAccount: vaultSupply.sender,
             actionType: ACTION_TYPE_MORPHO_VAULT_SUPPLY,
             actionContext: abi.encode(vaultSupplyActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, useQuotecall),
-            // Null address for OFFCHAIN payment.
-            paymentToken: payment.isToken ? PaymentInfo.knownToken(payment.currency, vaultSupply.chainId).token : address(0),
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, vaultSupply.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -1371,13 +1328,8 @@ library Actions {
             quarkAccount: vaultWithdraw.withdrawer,
             actionType: ACTION_TYPE_MORPHO_VAULT_WITHDRAW,
             actionContext: abi.encode(vaultWithdrawActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, false),
-            // Null address for OFFCHAIN payment.
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, vaultWithdraw.chainId).token
-                : address(0),
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, vaultWithdraw.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -1441,13 +1393,8 @@ library Actions {
             quarkAccount: claimRewards.claimer,
             actionType: ACTION_TYPE_MORPHO_CLAIM_REWARDS,
             actionContext: abi.encode(claimRewardsActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, false),
-            // Null address for OFFCHAIN payment.
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, claimRewards.chainId).token
-                : address(0),
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, claimRewards.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -1492,7 +1439,7 @@ library Actions {
             assetSymbol: assetPositions.symbol,
             chainId: quotePayInfo.chainId,
             quoteId: payment.quoteId,
-            payee: quotePayInfo.sender
+            payee: QUOTE_PAY_RECIPIENT
         });
 
         Action memory action = Actions.Action({
@@ -1500,13 +1447,9 @@ library Actions {
             quarkAccount: quotePayInfo.sender,
             actionType: ACTION_TYPE_QUOTE_PAY,
             actionContext: abi.encode(quotePayActionContext),
+            quotePayActionContext: abi.encode(quotePayActionContext),
             // TODO: Update this (paymentMethodForPayment)
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, true),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, quotePayInfo.chainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, quotePayInfo.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -1557,12 +1500,8 @@ library Actions {
                 ? ACTION_TYPE_UNWRAP
                 : ACTION_TYPE_WRAP,
             actionContext: abi.encode(wrapOrUnwrapActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, useQuotecall),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, wrapOrUnwrap.chainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, wrapOrUnwrap.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -1578,18 +1517,41 @@ library Actions {
         bytes[] memory scriptSources = new bytes[](1);
         scriptSources[0] = type(ApproveAndSwap).creationCode;
 
-        Accounts.ChainAccounts memory accounts = Accounts.findChainAccounts(swap.chainId, swap.chainAccountsList);
+        Accounts.QuarkSecret memory accountSecret;
+        SwapActionContext memory swapActionContext;
+        // Local scope to avoid stack too deep
+        {
+            Accounts.ChainAccounts memory accounts = Accounts.findChainAccounts(swap.chainId, swap.chainAccountsList);
 
-        Accounts.AssetPositions memory sellTokenAssetPositions =
-            Accounts.findAssetPositions(swap.sellAssetSymbol, accounts.assetPositionsList);
+            Accounts.AssetPositions memory sellTokenAssetPositions =
+                Accounts.findAssetPositions(swap.sellAssetSymbol, accounts.assetPositionsList);
 
-        Accounts.AssetPositions memory buyTokenAssetPositions =
-            Accounts.findAssetPositions(swap.buyAssetSymbol, accounts.assetPositionsList);
+            Accounts.AssetPositions memory buyTokenAssetPositions =
+                Accounts.findAssetPositions(swap.buyAssetSymbol, accounts.assetPositionsList);
 
-        Accounts.AssetPositions memory feeTokenAssetPositions =
-            Accounts.findAssetPositions(swap.feeAssetSymbol, accounts.assetPositionsList);
+            Accounts.AssetPositions memory feeTokenAssetPositions =
+                Accounts.findAssetPositions(swap.feeAssetSymbol, accounts.assetPositionsList);
 
-        Accounts.QuarkSecret memory accountSecret = Accounts.findQuarkSecret(swap.sender, accounts.quarkSecrets);
+            accountSecret = Accounts.findQuarkSecret(swap.sender, accounts.quarkSecrets);
+
+            // Construct Action
+            swapActionContext = SwapActionContext({
+                chainId: swap.chainId,
+                feeAmount: swap.feeAmount,
+                feeAssetSymbol: swap.feeAssetSymbol,
+                feeToken: swap.feeToken,
+                feeTokenPrice: feeTokenAssetPositions.usdPrice,
+                inputAmount: swap.sellAmount,
+                inputAssetSymbol: swap.sellAssetSymbol,
+                inputToken: swap.sellToken,
+                inputTokenPrice: sellTokenAssetPositions.usdPrice,
+                outputAmount: swap.buyAmount,
+                outputAssetSymbol: swap.buyAssetSymbol,
+                outputToken: swap.buyToken,
+                outputTokenPrice: buyTokenAssetPositions.usdPrice,
+                isExactOut: swap.isExactOut
+            });
+        }
 
         // TODO: Handle wrapping ETH? Do we need to?
         bytes memory scriptCalldata = abi.encodeWithSelector(
@@ -1612,35 +1574,13 @@ library Actions {
             expiry: swap.blockTimestamp + SWAP_EXPIRY_BUFFER
         });
 
-        // Construct Action
-        SwapActionContext memory swapActionContext = SwapActionContext({
-            chainId: swap.chainId,
-            feeAmount: swap.feeAmount,
-            feeAssetSymbol: swap.feeAssetSymbol,
-            feeToken: swap.feeToken,
-            feeTokenPrice: feeTokenAssetPositions.usdPrice,
-            inputAmount: swap.sellAmount,
-            inputAssetSymbol: swap.sellAssetSymbol,
-            inputToken: swap.sellToken,
-            inputTokenPrice: sellTokenAssetPositions.usdPrice,
-            outputAmount: swap.buyAmount,
-            outputAssetSymbol: swap.buyAssetSymbol,
-            outputToken: swap.buyToken,
-            outputTokenPrice: buyTokenAssetPositions.usdPrice,
-            isExactOut: swap.isExactOut
-        });
-
         Action memory action = Actions.Action({
             chainId: swap.chainId,
             quarkAccount: swap.sender,
             actionType: ACTION_TYPE_SWAP,
             actionContext: abi.encode(swapActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, useQuotecall),
-            paymentToken: payment.isToken
-                ? PaymentInfo.knownToken(payment.currency, swap.chainId).token
-                : PaymentInfo.NON_TOKEN_PAYMENT,
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, swap.chainId) : 0,
             nonceSecret: accountSecret.nonceSecret,
             totalPlays: 1
         });
@@ -1740,11 +1680,8 @@ library Actions {
             quarkAccount: swap.sender,
             actionType: ACTION_TYPE_RECURRING_SWAP,
             actionContext: abi.encode(recurringSwapActionContext),
+            quotePayActionContext: "",
             paymentMethod: PaymentInfo.paymentMethodForPayment(payment, useQuotecall),
-            // Null address for OFFCHAIN payment.
-            paymentToken: payment.isToken ? PaymentInfo.knownToken(payment.currency, swap.chainId).token : address(0),
-            paymentTokenSymbol: payment.currency,
-            paymentMaxCost: payment.isToken ? PaymentInfo.findMaxCost(payment, swap.chainId) : 0,
             nonceSecret: localVars.accountSecret.nonceSecret,
             totalPlays: RECURRING_SWAP_TOTAL_PLAYS
         });
@@ -1897,5 +1834,10 @@ library Actions {
     function emptyMorphoVaultWithdrawActionContext() external pure returns (MorphoVaultWithdrawActionContext memory) {
         MorphoVaultWithdrawActionContext[] memory mw = new MorphoVaultWithdrawActionContext[](1);
         return mw[0];
+    }
+
+    function emptyQuotePayActionContext() external pure returns (QuotePayActionContext memory) {
+        QuotePayActionContext[] memory qp = new QuotePayActionContext[](1);
+        return qp[0];
     }
 }

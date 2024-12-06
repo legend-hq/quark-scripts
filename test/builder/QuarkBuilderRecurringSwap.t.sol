@@ -245,8 +245,6 @@ contract QuarkBuilderRecurringSwapTest is Test, QuarkBuilderTest {
         assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce does the swap");
         assertEq(result.actions[0].actionType, "RECURRING_SWAP", "action type is 'RECURRING_SWAP'");
         assertEq(result.actions[0].paymentMethod, "OFFCHAIN", "payment method is 'OFFCHAIN'");
-        assertEq(result.actions[0].paymentToken, address(0), "payment token is null");
-        assertEq(result.actions[0].paymentMaxCost, 0, "payment has no max cost, since 'OFFCHAIN'");
         assertEq(result.actions[0].nonceSecret, ALICE_DEFAULT_SECRET, "unexpected nonce secret");
         assertEq(result.actions[0].totalPlays, Actions.RECURRING_SWAP_TOTAL_PLAYS, "total plays is correct");
         assertEq(
@@ -336,8 +334,6 @@ contract QuarkBuilderRecurringSwapTest is Test, QuarkBuilderTest {
         assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce does the swap");
         assertEq(result.actions[0].actionType, "RECURRING_SWAP", "action type is 'RECURRING_SWAP'");
         assertEq(result.actions[0].paymentMethod, "OFFCHAIN", "payment method is 'OFFCHAIN'");
-        assertEq(result.actions[0].paymentToken, address(0), "payment token is null");
-        assertEq(result.actions[0].paymentMaxCost, 0, "payment has no max cost, since 'OFFCHAIN'");
         assertEq(result.actions[0].nonceSecret, ALICE_DEFAULT_SECRET, "unexpected nonce secret");
         assertEq(result.actions[0].totalPlays, Actions.RECURRING_SWAP_TOTAL_PLAYS, "total plays is correct");
         assertEq(
@@ -424,8 +420,6 @@ contract QuarkBuilderRecurringSwapTest is Test, QuarkBuilderTest {
         assertEq(result.actions[0].quarkAccount, address(0xa11ce), "0xa11ce does the swap");
         assertEq(result.actions[0].actionType, "RECURRING_SWAP", "action type is 'RECURRING_SWAP'");
         assertEq(result.actions[0].paymentMethod, "PAY_CALL", "payment method is 'PAY_CALL'");
-        assertEq(result.actions[0].paymentToken, USDC_1, "payment token is USDC");
-        assertEq(result.actions[0].paymentMaxCost, 5e6, "payment max is set to 5e6 in this test case");
         assertEq(result.actions[0].nonceSecret, ALICE_DEFAULT_SECRET, "unexpected nonce secret");
         assertEq(result.actions[0].totalPlays, Actions.RECURRING_SWAP_TOTAL_PLAYS, "total plays is correct");
         assertEq(
