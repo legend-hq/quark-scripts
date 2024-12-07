@@ -107,14 +107,16 @@ class Context {
     init() {
         chainAccounts = []
         for network in allNetworks {
-            chainAccounts.append(QuarkBuilder.Accounts.ChainAccounts(
-                chainId: BigUInt(network.chainId),
-                quarkSecrets: [],
-                assetPositionsList: [],
-                cometPositions: [],
-                morphoPositions: [],
-                morphoVaultPositions: []
-            ))
+            for account in Account.allCases {
+                chainAccounts.append(QuarkBuilder.Accounts.ChainAccounts(
+                    chainId: BigUInt(network.chainId),
+                    quarkSecrets: [.init(account: account.address, nonceSecret: Hex("0x5555555555555555555555555555555555555555555555555555555555555555"))],
+                    assetPositionsList: [],
+                    cometPositions: [],
+                    morphoPositions: [],
+                    morphoVaultPositions: []
+                ))
+            }
         }
     }
 
@@ -206,6 +208,4 @@ func getTests() -> [AcceptanceTest] {
         let result = try await context.when(test.when)
         #expect(result == expected)
     }
-
-    // Write your test here and use APIs like `#expect(...)` to check expected conditions.
 }
