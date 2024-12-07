@@ -81,7 +81,7 @@ enum Call {
 }
 
 enum Expect {
-    case revert(String)
+    case revert(QuarkBuilder.RevertReason)
     case multicall(calls: [Call])
 }
 
@@ -151,11 +151,11 @@ class Context {
         }
     }
 
-    func when(_ when: When) async throws {
+    func when(_ when: When) async throws -> Result<QuarkBuilder.QuarkBuilderBase.BuilderResult, QuarkBuilder.RevertReason> {
         print(when)
         switch when {
         case let .transfer(from, to, amount, network):
-            let transfer = try await QuarkBuilder.transfer(
+            return try await QuarkBuilder.transfer(
                 transferIntent: .init(
                     chainId: BigUInt(network.chainId),
                     assetSymbol: amount.1.symbol,
@@ -169,7 +169,6 @@ class Context {
                 payment: .init(isToken: false, currency: "ETH", maxCosts: []),
                 withFunctions: [:]
             )
-            print(transfer)
         }
     }
 
@@ -184,7 +183,7 @@ func getTests() -> [AcceptanceTest] {
             name: "Alice transfers 10 USDC to Bob on Ethereum",
             given: [.tokenBalance(.alice, (100, .usdc), .ethereum)],
             when: .transfer(from: .alice, to: .bob, amount: (10, .usdc), on: .ethereum),
-            expect: .revert("Insufficient balance")
+            expect: .revert(.notUnwrappable)
         ),
     ]
 }
@@ -197,8 +196,15 @@ func getTests() -> [AcceptanceTest] {
             context.given(given)
         }
         print(context.chainAccounts)
-        try await context.when(test.when)
-        try context.expect(test.expect)
+        let expected: Result<QuarkBuilder.QuarkBuilderBase.BuilderResult, QuarkBuilder.RevertReason> = switch test.expect {
+        case let .revert(revertReason):
+            .failure(revertReason)
+        case let .multicall(calls):
+            .failure(.badData)
+        }
+
+        let result = try await context.when(test.when)
+        #expect(result == expected)
     }
 
     // Write your test here and use APIs like `#expect(...)` to check expected conditions.
