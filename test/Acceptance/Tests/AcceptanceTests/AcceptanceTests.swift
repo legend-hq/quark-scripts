@@ -76,13 +76,34 @@ enum When {
     case transfer(from: Account, to: Account, amount: TokenAmount, on: Network)
 }
 
+typealias ContractCall = (String, String, ABI.Value)
+
 enum Call {
-    case transfer(from: Account, to: Account, amount: TokenAmount, on: Network)
+    case transferErc20(tokenAmount: TokenAmount, recipient: Account)
+
+    var asContractCall: ContractCall {
+        switch self {
+        case let .transferErc20 (tokenAmount, recipient):
+            return ("TransferActions", TransferActions.transferERC20TokenFn.description, .tuple3(.address(tokenAmount.1.address(network: .ethereum)!), .address(recipient.address), .uint256(toWei(tokenAmount: tokenAmount))))
+        }
+    }
+}
+
+func tryDecodeCall(scriptSource: Hex, calldata: Hex) -> ContractCall? {
+    if scriptSource == TransferActions.creationCode {
+        for function in TransferActions.functions {
+            let decoded = try function.decode(calldata)
+            if decoded.name == "transferERC20Token" {
+                return (function.name, function.description, decoded.inputs)
+            }
+        }
+    }
+    return nil
 }
 
 enum Expect {
     case revert(QuarkBuilder.RevertReason)
-    case multicall(calls: [Call])
+    case call(Call)
 }
 
 class AcceptanceTest {
@@ -185,7 +206,7 @@ func getTests() -> [AcceptanceTest] {
             name: "Alice transfers 10 USDC to Bob on Ethereum",
             given: [.tokenBalance(.alice, (100, .usdc), .ethereum)],
             when: .transfer(from: .alice, to: .bob, amount: (10, .usdc), on: .ethereum),
-            expect: .revert(.notUnwrappable)
+            expect: .call(.transferErc20(tokenAmount: (10, .usdc), recipient: .bob))
         ),
     ]
 }
@@ -197,15 +218,21 @@ func getTests() -> [AcceptanceTest] {
         for given in test.given {
             context.given(given)
         }
-        print(context.chainAccounts)
-        let expected: Result<QuarkBuilder.QuarkBuilderBase.BuilderResult, QuarkBuilder.RevertReason> = switch test.expect {
         case let .revert(revertReason):
-            .failure(revertReason)
-        case let .multicall(calls):
-            .failure(.badData)
+            #expect(result == .failure(revertReason))
+        case let .call(call):
+            switch result {
+            case .failure:
+                #expect(false, "Expected success, got failure")
+            case let .success(builderResult):
+                #expect(builderResult == Acceptance.QuarkBuilder.QuarkBuilderBase.BuilderResult(
+                    scriptSource: TransferActions.creationCode,
+                    calldata: call.asContractCall.2.encode()
+                )
+            )
         }
 
         let result = try await context.when(test.when)
-        #expect(result == expected)
+        
     }
 }
