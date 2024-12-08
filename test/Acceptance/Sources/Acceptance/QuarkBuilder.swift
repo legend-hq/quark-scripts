@@ -1,5 +1,5 @@
-import BigInt
-import Eth
+@preconcurrency import BigInt
+@preconcurrency import Eth
 import Foundation
 
 public enum QuarkBuilder {
