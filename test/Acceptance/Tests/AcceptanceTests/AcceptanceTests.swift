@@ -14,7 +14,7 @@ func getTests() -> [AcceptanceTest] {
                 .quote(.basic)
             ],
             when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .ethereum),
-            expect: .success(.multicall([
+            expect: .single(.multicall([
                 .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
                 .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic)
             ]))
@@ -308,7 +308,7 @@ enum When {
 
 enum Expect {
     case revert(QuarkBuilder.RevertReason)
-    case success(Call)
+    case single(Call)
 }
 
 class AcceptanceTest {
@@ -432,7 +432,7 @@ class Context {
         switch test.expect {
         case let .revert(revertReason):
             #expect(result == .failure(revertReason))
-        case let .success(expectedCall):
+        case let .single(expectedCall):
             switch result {
             case .failure(let revertReason):
                 #expect(revertReason == .unknownRevert("Unexpected Revert", "Expected \(expectedCall.description)"))
