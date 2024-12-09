@@ -230,6 +230,44 @@ enum Account: Equatable {
     }
 }
 
+enum Comet: Equatable {
+    case cusdcv3
+    case unknownComet(EthAddress)
+
+    static let knownCases: [Comet] = [.cusdcv3]
+
+    func address(network: Network) -> EthAddress {
+        switch (network, self) {
+        // TODO?: add cases for some more (network, market) pairs?
+        // eventually this should be migrated to use builderpack instead.
+        case (.ethereum, .cusdcv3):
+            return EthAddress("0xc3d688B66703497DAA19211EEdff47f25384cdc3")
+        case (_, .unknownComet(address)):
+            return address
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .cusdcv3:
+            return "cUSDCv3"
+        case .unknownComet(address):
+            return address
+        }
+    }
+
+    static func from(address: EthAddress) -> Comet {
+        for knownNetwork in Network.knownCases {
+            for knownCase in Comet.knownCases {
+                if address == knownCase.address {
+                    return knownCase
+                }
+            }
+        }
+        return .unknownComet(address)
+    }
+}
+
 enum Quote: Hashable, Equatable {
     case basic
     case custom(quoteId: Hex, prices: [Token: Float], fees: [Network: Float])
@@ -390,6 +428,7 @@ enum Given {
 
 enum When {
     case transfer(from: Account, to: Account, amount: TokenAmount, on: Network)
+    case cometSupply(from: Account, market: Comet, amount: TokenAmount)
 
     var sender: Account {
         switch self {
