@@ -7,6 +7,9 @@ evm_version = "cancun"
 bytecode_hash = "none"
 cbor_metadata = false
 
+# do not compile or test *.t.sol artifacts copied into the swiftpm build
+no_match_path = "./test/Acceptance/{.index-build,.build}/**"
+
 libs = ["./lib"]
 
 [profile.ir]
