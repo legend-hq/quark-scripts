@@ -236,8 +236,10 @@ enum Token: Hashable, Equatable {
 
     static func from(address: EthAddress) -> Token {
         for knownCase in Token.knownCases {
-            if address == knownCase.address(network: .ethereum) {
-                return knownCase
+            for knownNetwork in Network.knownCases {
+                if address == knownCase.address(network: knownNetwork) {
+                    return knownCase
+                }
             }
         }
         return .unknownToken(address)
