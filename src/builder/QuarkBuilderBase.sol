@@ -126,11 +126,10 @@ contract QuarkBuilderBase {
                 paymentTokenIsPartOfAssetSymbolOuts = true;
             }
 
-            if (needsBridgedFunds(assetSymbolOut, actionIntent.amountOuts[i], actionIntent.chainId, chainAccountsList))
-            {
+            if (needsBridgedFunds(assetSymbolOut, actionIntent.amountOuts[i], actionIntent.chainId, chainAccountsList)) {
                 if (actionIntent.bridgeEnabled) {
                     uint256 amountNeededOnDst = actionIntent.amountOuts[i];
-                    (IQuarkWallet.QuarkOperation[] memory bridgeQuarkOperations, Actions.Action[] memory bridgeActions)
+                    (IQuarkWallet.QuarkOperation[] memory bridgeQuarkOperations, Actions.Action[] memory bridgeActions, uint256 amountLeftToBridge)
                     = Actions.constructBridgeOperations(
                         Actions.BridgeOperationInfo({
                             assetSymbol: assetSymbolOut,

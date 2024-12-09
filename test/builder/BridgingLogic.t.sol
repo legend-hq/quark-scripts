@@ -107,7 +107,7 @@ contract BridgingLogicTest is Test, QuarkBuilderTest {
                     address(0xb0b), // recipient
                     weth_(1), // inputToken
                     weth_(8453), // outputToken
-                    0.5e18 * (1e18 + MockAcrossFFIConstants.VARIABLE_FEE_PCT) / 1e18 + MockAcrossFFIConstants.GAS_FEE, // inputAmount
+                    0.5e18 * (1e18 + MockAcrossFFIConstants.VARIABLE_FEE_PCT) / 1e18 + MockAcrossFFIConstants.L2_GAS_FEE, // inputAmount
                     0.5e18, // outputAmount
                     8453, // destinationChainId
                     address(0), // exclusiveRelayer
@@ -166,7 +166,7 @@ contract BridgingLogicTest is Test, QuarkBuilderTest {
                     token: WETH_1,
                     assetSymbol: "WETH",
                     inputAmount: 0.5e18 * (1e18 + MockAcrossFFIConstants.VARIABLE_FEE_PCT) / 1e18
-                        + MockAcrossFFIConstants.GAS_FEE,
+                        + MockAcrossFFIConstants.L2_GAS_FEE,
                     outputAmount: 0.5e18,
                     chainId: 1,
                     recipient: address(0xb0b),
@@ -255,8 +255,8 @@ contract BridgingLogicTest is Test, QuarkBuilderTest {
                     address(0xb0b), // recipient
                     address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48), // inputToken
                     address(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913), // outputToken
-                    0x2e14e0, // inputAmount
-                    0x1e8480, // outputAmount
+                    2.05e6, // inputAmount
+                    2e6, // outputAmount
                     8453, // destinationChainId
                     address(0), // exclusiveRelayer
                     uint32(BLOCK_TIMESTAMP) - 30 seconds, // quoteTimestamp
@@ -320,8 +320,8 @@ contract BridgingLogicTest is Test, QuarkBuilderTest {
                     price: USDC_PRICE,
                     token: USDC_1,
                     assetSymbol: "USDC",
-                    inputAmount: 0x2e14e0,
-                    outputAmount: 0x1e8480,
+                    inputAmount: 2.05e6,
+                    outputAmount: 2e6,
                     chainId: 1,
                     recipient: address(0xb0b),
                     destinationChainId: 8453,
@@ -356,5 +356,26 @@ contract BridgingLogicTest is Test, QuarkBuilderTest {
         assertNotEq(result.eip712Data.digest, hex"", "non-empty digest");
         assertNotEq(result.eip712Data.domainSeparator, hex"", "non-empty domain separator");
         assertNotEq(result.eip712Data.hashStruct, hex"", "non-empty hashStruct");
+    }
+
+    function testBridgeWithAcrossMaxTransferReverts() public {
+        QuarkBuilder builder = new QuarkBuilder();
+
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 6e6, 5.67e6));
+        // Note: There are 3e6 USDC on each chain, so the Builder should attempt to bridge 2 USDC to chain 8453
+        builder.transfer(
+            TransferActionsBuilder.TransferIntent({
+                assetSymbol: "USDC",
+                chainId: 8453,
+                amount: 6e6,
+                sender: address(0xb0b),
+                recipient: address(0xceecee),
+                blockTimestamp: BLOCK_TIMESTAMP,
+                preferAcross: true,
+                paymentAssetSymbol: "USDC"
+            }), // transfer 6 USDC on chain 8453 to 0xceecee
+            chainAccountsList_(6e6), // holding 6 USDC in total across chains 1, 8453
+            quote_()
+        );
     }
 }
