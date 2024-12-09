@@ -6,13 +6,14 @@ import PackageDescription
 let package = Package(
     name: "Acceptance",
     platforms: [
-        .macOS(.v10_15)
+        .macOS(.v10_15),
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
             name: "Acceptance",
-            targets: ["Acceptance"]),
+            targets: ["Acceptance"]
+        ),
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
@@ -26,8 +27,9 @@ let package = Package(
             name: "Acceptance",
             dependencies: [
                 .product(name: "Eth", package: "Eth.swift"),
-                "BigInt"
-            ]),
+                "BigInt",
+            ]
+        ),
         .testTarget(
             name: "AcceptanceTests",
             dependencies: ["Acceptance"]
