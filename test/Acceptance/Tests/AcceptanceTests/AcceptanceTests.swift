@@ -8,19 +8,19 @@ import Testing
 
 func getTests() -> [AcceptanceTest] {
     return [
-        // .init(
-        //     name: "Alice transfers 10 USDC to Bob on Ethereum",
-        //     given: [
-        //         .tokenBalance(.alice, .amt(100, .usdc), .ethereum),
-        //         .quote(.basic),
-        //     ],
-        //     when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .ethereum),
-        //     expect: .single(
-        //         .multicall([
-        //             .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
-        //             .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
-        //         ]))
-        // ),
+        .init(
+            name: "Alice transfers 10 USDC to Bob on Ethereum",
+            given: [
+                .tokenBalance(.alice, .amt(100, .usdc), .ethereum),
+                .quote(.basic),
+            ],
+            when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .ethereum),
+            expect: .single(
+                .multicall([
+                    .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
+                    .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
+                ]))
+        ),
         .init(
             name: "Alice transfers 10 USDC to Bob via Bridge",
             given: [
@@ -31,10 +31,9 @@ func getTests() -> [AcceptanceTest] {
             expect: .single(
                 .multicall([
                     .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
-                    .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
-                ])),
-            only: true
-        ),
+                    .quotePay(payment: .amt(0.04, .usdc), payee: .stax, quote: .basic),
+                ]))
+        )
     ]
 }
 
@@ -57,6 +56,7 @@ enum Call: Equatable {
     static func tryDecodeCall(scriptAddress: EthAddress, calldata: Hex, network: Network) -> Call {
 
         if scriptAddress == getScriptAddress(AcrossActions.creationCode) {
+            print("DECODE ACROSS")
             switch try? AcrossActions.depositV3Fn.decodeInput(input: calldata) {
             case let .tuple14(
                 .address(_),
@@ -78,17 +78,19 @@ enum Call: Equatable {
                     bridge: "Across",
                     srcNetwork: network,
                     destinationNetwork: Network.fromChainId(BigInt(destinationChainId)),
-                    tokenAmount: Token.getTokenAmount(amount: inputAmount, address: inputToken))
+                    tokenAmount: Token.getTokenAmount(amount: inputAmount, network: network, address: inputToken))
             default:
                 break
             }
         }
 
         if scriptAddress == getScriptAddress(TransferActions.creationCode) {
+            print("DECODE TRANSFER")
             switch try? TransferActions.transferERC20TokenFn.decodeInput(input: calldata) {
             case let .tuple3(.address(token), .address(recipient), .uint256(amount)):
+            print("ADDRESSS \(token)")
                 return .transferErc20(
-                    tokenAmount: Token.getTokenAmount(amount: amount, address: token),
+                    tokenAmount: Token.getTokenAmount(amount: amount, network: network, address: token),
                     recipient: Account.from(address: recipient))
             default:
                 break
@@ -96,13 +98,14 @@ enum Call: Equatable {
         }
 
         if scriptAddress == getScriptAddress(QuotePay.creationCode) {
+            print("DECODE QUOTE PAY")
             switch try? QuotePay.payFn.decodeInput(input: calldata) {
             case let .tuple4(
                 .address(payee), .address(paymentToken), .uint256(quotedAmount), .bytes32(quoteId)):
 
                 print("quotedAmount: \(quotedAmount)")
                 return .quotePay(
-                    payment: Token.getTokenAmount(amount: quotedAmount, address: paymentToken),
+                    payment: Token.getTokenAmount(amount: quotedAmount, network: network, address: paymentToken),
                     payee: Account.from(address: payee),
                     quote: Quote.findQuote(quoteId: quoteId, prices: [:], fees: [:]))
             default:
@@ -274,6 +277,10 @@ enum Token: Hashable, Equatable {
     case unknownToken(EthAddress)
 
     static let knownCases: [Token] = [.usdc, .eth]
+    static let ETHEREUM_USDC_ADDRESS = EthAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+    static let BASE_USDC_ADDRESS = EthAddress("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+    static let ARBITRUM_USDC_ADDRESS = EthAddress("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+    static let ETHEREUM_ETH_ADDRESS = EthAddress("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE")
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(description)
@@ -293,25 +300,31 @@ enum Token: Hashable, Equatable {
     func address(network: Network) -> EthAddress {
         switch (network, self) {
         case (.ethereum, .usdc):
-            return EthAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+            return Token.ETHEREUM_USDC_ADDRESS
         case (.base, .usdc):
-            return EthAddress("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+            return Token.BASE_USDC_ADDRESS
         case (.arbitrum, .usdc):
-            return EthAddress("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+            return Token.ARBITRUM_USDC_ADDRESS
+        case (_, .eth):
+            return Token.ETHEREUM_ETH_ADDRESS
         default:
-            fatalError("Unknown token \(self) for network \(network)")
+            customFatalError("Unknown token \(self) for network \(network)")
         }
     }
 
-    static func from(address: EthAddress) -> Token {
-        for knownCase in Token.knownCases {
-            for knownNetwork in Network.knownCases {
-                if address == knownCase.address(network: knownNetwork) {
-                    return knownCase
-                }
-            }
+    static func from(network: Network, address: EthAddress) -> Token {
+        switch (network, address) {
+        case (.ethereum, Token.ETHEREUM_USDC_ADDRESS):
+            return .usdc
+        case (.base, Token.BASE_USDC_ADDRESS):
+            return .usdc
+        case (.arbitrum, Token.ARBITRUM_USDC_ADDRESS):
+            return .usdc
+        case (.ethereum, Token.ETHEREUM_ETH_ADDRESS):
+            return .eth
+        default:
+            return .unknownToken(address)
         }
-        return .unknownToken(address)
     }
 
     var symbol: String {
@@ -347,8 +360,8 @@ enum Token: Hashable, Equatable {
         }
     }
 
-    static func getTokenAmount(amount: BigUInt, address: EthAddress) -> TokenAmount {
-        let token = Token.from(address: address)
+    static func getTokenAmount(amount: BigUInt, network: Network, address: EthAddress) -> TokenAmount {
+        let token = Token.from(network: network, address: address)
         return TokenAmount(amount: Float(amount) / pow(10, Float(token.decimals)), token: token)
     }
 }
@@ -427,6 +440,10 @@ class Context {
         chainAccounts = []
         prices = [:]
         fees = [:]
+
+
+        let combinations = zip(Token.knownCases.map { a in allNetworks.map { b in (a, b) } }.joined(), 
+                      allNetworks.map { b in Token.knownCases.map { a in (a, b) } }.joined())
         for network in allNetworks {
             chainAccounts.append(
                 QuarkBuilder.Accounts.ChainAccounts(
