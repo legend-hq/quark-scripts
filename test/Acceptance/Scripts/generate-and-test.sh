@@ -5,7 +5,7 @@ set -eo pipefail
 script_dir=$(dirname "${BASH_SOURCE[0]}")
 out_dir="$(cd "${script_dir}/../../../out" && pwd)"
 source_out_dir="$(cd "${script_dir}/../Sources/Acceptance/Contracts" && pwd)"
-contracts=("DeFiScripts" "Multicall" "QuotePay" "QuarkBuilder")
+contracts=("DeFiScripts" "Multicall" "QuotePay" "QuarkBuilder" "AcrossScripts")
 
 for contract in "${contracts[@]}"; do
     contract_path=$out_dir/$contract.sol
