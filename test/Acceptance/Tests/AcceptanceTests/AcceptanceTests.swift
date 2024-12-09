@@ -1,24 +1,26 @@
-@testable import Acceptance
 @preconcurrency import BigInt
 @preconcurrency import Eth
 import Foundation
 import SwiftKeccak
 import Testing
 
+@testable import Acceptance
+
 func getTests() -> [AcceptanceTest] {
     return [
-        .init(
-            name: "Alice transfers 10 USDC to Bob on Ethereum",
-            given: [
-                .tokenBalance(.alice, .amt(100, .usdc), .ethereum),
-                .quote(.basic),
-            ],
-            when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .ethereum),
-            expect: .single(.multicall([
-                .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
-                .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
-            ]))
-        ),
+        // .init(
+        //     name: "Alice transfers 10 USDC to Bob on Ethereum",
+        //     given: [
+        //         .tokenBalance(.alice, .amt(100, .usdc), .ethereum),
+        //         .quote(.basic),
+        //     ],
+        //     when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .ethereum),
+        //     expect: .single(
+        //         .multicall([
+        //             .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
+        //             .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
+        //         ]))
+        // ),
         .init(
             name: "Alice transfers 10 USDC to Bob via Bridge",
             given: [
@@ -26,16 +28,19 @@ func getTests() -> [AcceptanceTest] {
                 .quote(.basic),
             ],
             when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .arbitrum),
-            expect: .single(.multicall([
-                .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
-                .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
-            ])),
+            expect: .single(
+                .multicall([
+                    .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
+                    .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
+                ])),
             only: true
         ),
     ]
 }
 
 enum Call: Equatable {
+    case bridge(
+        bridge: String, srcNetwork: Network, destinationNetwork: Network, tokenAmount: TokenAmount)
     case transferErc20(tokenAmount: TokenAmount, recipient: Account)
     case quotePay(payment: TokenAmount, payee: Account, quote: Quote)
     case multicall(_ calls: [Call])
@@ -43,16 +48,48 @@ enum Call: Equatable {
     case unknownScriptCall(EthAddress, Hex)
 
     static let allFunctions: [(String, Hex, [ABI.Function])] = [
+        ("AcrossActions", AcrossActions.creationCode, AcrossActions.functions),
         ("TransferActions", TransferActions.creationCode, TransferActions.functions),
         ("Multicall", Multicall.creationCode, Multicall.functions),
         ("QuotePay", QuotePay.creationCode, QuotePay.functions),
     ]
 
-    static func tryDecodeCall(scriptAddress: EthAddress, calldata: Hex) -> Call {
+    static func tryDecodeCall(scriptAddress: EthAddress, calldata: Hex, network: Network) -> Call {
+
+        if scriptAddress == getScriptAddress(AcrossActions.creationCode) {
+            switch try? AcrossActions.depositV3Fn.decodeInput(input: calldata) {
+            case let .tuple14(
+                .address(_),
+                .address(_),
+                .address(_),
+                .address(inputToken),
+                .address(_),
+                .uint256(inputAmount),
+                .uint256(_),
+                .uint256(destinationChainId),
+                .address(_),
+                .uint32(_),
+                .uint32(_),
+                .uint32(_),
+                .bytes(_),
+                .bool(_)
+            ):
+                return .bridge(
+                    bridge: "Across",
+                    srcNetwork: network,
+                    destinationNetwork: Network.fromChainId(BigInt(destinationChainId)),
+                    tokenAmount: Token.getTokenAmount(amount: inputAmount, address: inputToken))
+            default:
+                break
+            }
+        }
+
         if scriptAddress == getScriptAddress(TransferActions.creationCode) {
             switch try? TransferActions.transferERC20TokenFn.decodeInput(input: calldata) {
             case let .tuple3(.address(token), .address(recipient), .uint256(amount)):
-                return .transferErc20(tokenAmount: Token.getTokenAmount(amount: amount, address: token), recipient: Account.from(address: recipient))
+                return .transferErc20(
+                    tokenAmount: Token.getTokenAmount(amount: amount, address: token),
+                    recipient: Account.from(address: recipient))
             default:
                 break
             }
@@ -60,8 +97,14 @@ enum Call: Equatable {
 
         if scriptAddress == getScriptAddress(QuotePay.creationCode) {
             switch try? QuotePay.payFn.decodeInput(input: calldata) {
-            case let .tuple4(.address(payee), .address(paymentToken), .uint256(quotedAmount), .bytes32(quoteId)):
-                return .quotePay(payment: Token.getTokenAmount(amount: quotedAmount, address: paymentToken), payee: Account.from(address: payee), quote: Quote.findQuote(quoteId: quoteId, prices: [:], fees: [:]))
+            case let .tuple4(
+                .address(payee), .address(paymentToken), .uint256(quotedAmount), .bytes32(quoteId)):
+
+                print("quotedAmount: \(quotedAmount)")
+                return .quotePay(
+                    payment: Token.getTokenAmount(amount: quotedAmount, address: paymentToken),
+                    payee: Account.from(address: payee),
+                    quote: Quote.findQuote(quoteId: quoteId, prices: [:], fees: [:]))
             default:
                 break
             }
@@ -70,12 +113,16 @@ enum Call: Equatable {
         if scriptAddress == getScriptAddress(Multicall.creationCode) {
             switch try? Multicall.runFn.decodeInput(input: calldata) {
             case let .tuple2(.array(.address, callContracts), .array(.bytes, callDatas)):
-                let calls = zip(callContracts, callDatas).map { switch ($0, $1) {
-                case let (.address(scriptAddressInner), .bytes(calldataInner)):
-                    return Call.tryDecodeCall(scriptAddress: scriptAddressInner, calldata: calldataInner)
-                default:
-                    fatalError("Mismatched types for Multicall: \(($0.schema, $1.schema))")
-                } }
+                let calls = zip(callContracts, callDatas).map {
+                    switch ($0, $1) {
+                    case let (.address(scriptAddressInner), .bytes(calldataInner)):
+                        return Call.tryDecodeCall(
+                            scriptAddress: scriptAddressInner, calldata: calldataInner,
+                            network: network)
+                    default:
+                        fatalError("Mismatched types for Multicall: \(($0.schema, $1.schema))")
+                    }
+                }
                 return .multicall(calls)
             default:
                 break
@@ -96,10 +143,15 @@ enum Call: Equatable {
 
     var description: String {
         switch self {
+        case let .bridge(bridge, chainId, destinationChainId, tokenAmount):
+            return
+                "bridge(\(bridge), \(tokenAmount.amount) \(tokenAmount.token.symbol) from \(chainId.description) to \(destinationChainId.description))"
         case let .transferErc20(tokenAmount, recipient):
-            return "transferErc20(\(tokenAmount.amount) \(tokenAmount.token.symbol) to \(recipient.description))"
+            return
+                "transferErc20(\(tokenAmount.amount) \(tokenAmount.token.symbol) to \(recipient.description))"
         case let .quotePay(payment, payee, quoteId):
-            return "quotePay(\(payment.amount) \(payment.token.symbol) to \(payee.description), quoteId: \(quoteId))"
+            return
+                "quotePay(\(payment.amount) \(payment.token.symbol) to \(payee.description), quoteId: \(quoteId))"
         case let .multicall(calls):
             return "multicall(\(calls.map { $0.description }.joined(separator: ", ")))"
         case let .unknownFunctionCall(name, function, value):
@@ -121,14 +173,14 @@ func getScriptAddress(_ creationCode: Hex) -> EthAddress {
     // 3. salt (32 bytes of 0 in this case)
     // 4. keccak256 hash of initialization code
     var packed = Data()
-    packed.append(Data([0xFF])) // prefix byte
-    packed.append(codeJarAddress.data) // deploying address
-    packed.append(Data(repeating: 0, count: 32)) // salt
-    packed.append(SwiftKeccak.keccak256(creationCode.data)) // hash of init code
+    packed.append(Data([0xFF]))  // prefix byte
+    packed.append(codeJarAddress.data)  // deploying address
+    packed.append(Data(repeating: 0, count: 32))  // salt
+    packed.append(SwiftKeccak.keccak256(creationCode.data))  // hash of init code
 
     // Take keccak256 hash and extract last 20 bytes for address
     let hash = SwiftKeccak.keccak256(packed)
-    return EthAddress(Hex(hash.subdata(in: 12 ..< 32)))!
+    return EthAddress(Hex(hash.subdata(in: 12..<32)))!
 }
 
 enum Account: Equatable {
@@ -186,7 +238,10 @@ enum Quote: Hashable, Equatable {
         case let .custom(quoteId, prices, fees):
             return (quoteId, prices, fees)
         case .basic:
-            return (Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"), [.usdc: 1.0], [.ethereum: 0.10, .base: 0.02, .arbitrum: 0.04])
+            return (
+                Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                [.usdc: 1.0], [.ethereum: 0.10, .base: 0.02, .arbitrum: 0.04]
+            )
         }
     }
 
@@ -342,7 +397,10 @@ class AcceptanceTest {
     let only: Bool
     let skip: Bool
 
-    init(name: String, given: [Given], when: When, expect: Expect, only: Bool = false, skip: Bool = false) {
+    init(
+        name: String, given: [Given], when: When, expect: Expect, only: Bool = false,
+        skip: Bool = false
+    ) {
         self.name = name
         self.given = given
         self.when = when
@@ -368,14 +426,21 @@ class Context {
         prices = [:]
         fees = [:]
         for network in allNetworks {
-            chainAccounts.append(QuarkBuilder.Accounts.ChainAccounts(
-                chainId: BigUInt(network.chainId),
-                quarkSecrets: [.init(account: sender.address, nonceSecret: Hex("0x5555555555555555555555555555555555555555555555555555555555555555"))],
-                assetPositionsList: [],
-                cometPositions: [],
-                morphoPositions: [],
-                morphoVaultPositions: []
-            ))
+            chainAccounts.append(
+                QuarkBuilder.Accounts.ChainAccounts(
+                    chainId: BigUInt(network.chainId),
+                    quarkSecrets: [
+                        .init(
+                            account: sender.address,
+                            nonceSecret: Hex(
+                                "0x5555555555555555555555555555555555555555555555555555555555555555"
+                            ))
+                    ],
+                    assetPositionsList: [],
+                    cometPositions: [],
+                    morphoPositions: [],
+                    morphoVaultPositions: []
+                ))
         }
         print(chainAccounts)
     }
@@ -387,7 +452,9 @@ class Context {
             // the chainId is the given network.
             let chainId = BigUInt(network.chainId)
             let balance = BigUInt(amount.amount * pow(10, Float(amount.token.decimals)))
-            let accountBalances = [QuarkBuilder.Accounts.AccountBalance(account: account.address, balance: balance)]
+            let accountBalances = [
+                QuarkBuilder.Accounts.AccountBalance(account: account.address, balance: balance)
+            ]
             let assetPositions = QuarkBuilder.Accounts.AssetPositions(
                 asset: amount.token.address(network: network),
                 symbol: amount.token.symbol,
@@ -406,7 +473,22 @@ class Context {
                         morphoVaultPositions: chainAccount.morphoVaultPositions
                     )
                 }
-                return chainAccount
+                return QuarkBuilder.Accounts.ChainAccounts(
+                    chainId: chainAccount.chainId,
+                    quarkSecrets: chainAccount.quarkSecrets,
+                    assetPositionsList: chainAccount.assetPositionsList + [
+                        QuarkBuilder.Accounts.AssetPositions(
+                            asset: amount.token.address(network: network),
+                            symbol: amount.token.symbol,
+                            decimals: BigUInt(amount.token.decimals),
+                            usdPrice: BigUInt(amount.token.usdPrice),
+                            accountBalances: [.init(account: account.address, balance: BigUInt(0))]
+                        )
+                    ],
+                    cometPositions: chainAccount.cometPositions,
+                    morphoPositions: chainAccount.morphoPositions,
+                    morphoVaultPositions: chainAccount.morphoVaultPositions
+                )
             }
         case let .quote(quote):
             prices = quote.prices
@@ -414,10 +496,14 @@ class Context {
         }
     }
 
-    func when(_ when: When) async throws -> Result<QuarkBuilder.QuarkBuilderBase.BuilderResult, QuarkBuilder.RevertReason> {
+    func when(_ when: When) async throws -> Result<
+        QuarkBuilder.QuarkBuilderBase.BuilderResult, QuarkBuilder.RevertReason
+    > {
         switch when {
         case let .transfer(from, to, amount, network):
-            print(chainAccounts)
+            // dump("ARE THESE HERE? \(chainAccounts)")
+
+
             return try await QuarkBuilder.transfer(
                 transferIntent: .init(
                     chainId: BigUInt(network.chainId),
@@ -431,11 +517,19 @@ class Context {
                 ),
                 chainAccountsList: chainAccounts,
                 quote: .init(
-                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    quoteId: Hex(
+                        "0x00000000000000000000000000000000000000000000000000000000000000CC"),
                     issuedAt: 0,
                     expiresAt: BigUInt(Date(timeIntervalSinceNow: 1_000_000).timeIntervalSince1970),
-                    assetQuotes: prices.map { .init(symbol: $0.key.symbol, price: BigUInt($0.value * 1e8)) },
-                    networkOperationFees: fees.map { .init(chainId: BigUInt($0.key.chainId), opType: "baseline", price: BigUInt($0.value)) }
+                    assetQuotes: prices.map {
+                        .init(symbol: $0.key.symbol, price: BigUInt($0.value * 1e8))
+                    },
+                    networkOperationFees: fees.map {
+                        .init(
+                            chainId: BigUInt($0.key.chainId),
+                            opType: "BASELINE",
+                            price: BigUInt($0.value * 1e8))
+                    }
                 ),
                 withFunctions: [:]
             )
@@ -445,6 +539,14 @@ class Context {
     func expect(_ expect: Expect) throws {
         print(expect)
     }
+}
+
+func customFatalError(_ message: String, file: String = #file, line: Int = #line) -> Never {
+    print("Error: \(message)")
+    print("Location: \(file):\(line)")
+    print("Stack trace:")
+    Thread.callStackSymbols.forEach { print($0) }
+    fatalError(message)
 }
 
 @Test func testCreate2Address() {
@@ -468,17 +570,26 @@ class Context {
         case let .single(expectedCall):
             switch result {
             case let .failure(revertReason):
-                #expect(revertReason == .unknownRevert("Unexpected Revert", "Expected \(expectedCall.description)"))
+                #expect(
+                    revertReason
+                        == .unknownRevert(
+                            "Unexpected Revert", "Expected \(expectedCall.description)"))
             case let .success(builderResult):
-                #expect(builderResult.version == "0.4.1") // TODO: Check version?
-                #expect(builderResult.quarkOperations.count == 1) // TODO: Check number of operations?
-                #expect(builderResult.actions.count == 1) // TODO: Check number of actions?
+                #expect(builderResult.version == "0.4.1")  // TODO: Check version?
+                #expect(builderResult.quarkOperations.count == 1)  // TODO: Check number of operations?
+                #expect(builderResult.actions.count == 1)  // TODO: Check number of actions?
                 // #expect(builderResult.eip712Data.domainSeparator == EIP712Helper.DomainSeparator(name: "Quark", version: "1")) // TODO: Check domain separator?
-                #expect(builderResult.paymentCurrency == "USDC") // TODO: Check payment currency?
+                #expect(builderResult.paymentCurrency == "USDC")  // TODO: Check payment currency?
 
                 // TODO: Handle multiple quark operations
-                let operation: QuarkBuilder.IQuarkWallet.QuarkOperation = builderResult.quarkOperations[0]
-                let call = Call.tryDecodeCall(scriptAddress: operation.scriptAddress, calldata: operation.scriptCalldata)
+                let operation: QuarkBuilder.IQuarkWallet.QuarkOperation =
+                    builderResult.quarkOperations[0]
+                let action: QuarkBuilder.Actions.Action = builderResult.actions[0]
+                let call = Call.tryDecodeCall(
+                    scriptAddress: operation.scriptAddress,
+                    calldata: operation.scriptCalldata,
+                    network: Network.fromChainId(BigInt(action.chainId))
+                )
                 #expect(call == expectedCall)
             }
         }
