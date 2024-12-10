@@ -1,5 +1,5 @@
 {
-  "originHash" : "9ad9eccfcfd7e615ed956105acb05ea78a74d402fc2022cfda938ce360cf4355",
+  "originHash" : "f14e1aaa46a66b59f79dc33e1545892e61c2df1e20ebc2544a4acfe2f1157d2d",
   "pins" : [
     {
       "identity" : "bigint",
@@ -15,7 +15,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/hayesgm/Eth.swift",
       "state" : {
-        "revision" : "2fea66f6784115c89c375910b4660f2eef8ab917"
+        "revision" : "f4410d13e3bcffbaed550a516c6e59bc8a3cc1d8"
       }
     },
     {
