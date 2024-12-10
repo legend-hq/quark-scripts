@@ -41,4 +41,14 @@ public enum QuotePay {
             return .failure(rewrapError(e, value: v))
         }
     }
+
+    public static func payDecode(input: Hex) throws -> (EthAddress, EthAddress, BigUInt, Hex) {
+        let decodedInput = try payFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple4(.address(payee), .address(paymentToken), .uint256(quotedAmount), .bytes32(quoteId)):
+            return (payee, paymentToken, quotedAmount, quoteId)
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, payFn.inputTuple)
+        }
+    }
 }

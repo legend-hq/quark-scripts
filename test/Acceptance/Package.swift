@@ -17,7 +17,7 @@ let package = Package(
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
-        .package(url: "https://github.com/hayesgm/Eth.swift", branch: "main"),
+        .package(url: "https://github.com/hayesgm/Eth.swift", branch: "2fea66f6784115c89c375910b4660f2eef8ab917"),
         .package(url: "https://github.com/attaswift/BigInt.git", from: "5.3.0"),
     ],
     targets: [

@@ -2282,6 +2282,16 @@ public enum QuarkBuilder {
         }
     }
 
+    public static func VERSIONDecode(input: Hex) throws {
+        let decodedInput = try VERSIONFn.decodeInput(input: input)
+        switch decodedInput {
+        case .tuple0:
+            return ()
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, VERSIONFn.inputTuple)
+        }
+    }
+
     public static let cometBorrowFn = ABI.Function(
         name: "cometBorrow",
         inputs: [.tuple([.uint256, .string, .uint256, .address, .uint256, .array(.uint256), .array(.string), .address, .bool]), .array(.tuple([.uint256, .array(Accounts.QuarkSecret.schema), .array(Accounts.AssetPositions.schema), .array(Accounts.CometPositions.schema), .array(Accounts.MorphoPositions.schema), .array(Accounts.MorphoVaultPositions.schema)])), .tuple([.bool, .string, .bytes32, .array(PaymentInfo.PaymentMaxCost.schema)])],
@@ -2312,6 +2322,27 @@ public enum QuarkBuilder {
             }
         } catch let EVM.QueryError.error(e, v) {
             return .failure(rewrapError(e, value: v))
+        }
+    }
+
+    public static func cometBorrowDecode(input: Hex) throws -> (CometActionsBuilder.CometBorrowIntent, [Accounts.ChainAccounts], PaymentInfo.Payment) {
+        let decodedInput = try cometBorrowFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple9(.uint256(amount),
+                                 .string(assetSymbol),
+                                 .uint256(blockTimestamp),
+                                 .address(borrower),
+                                 .uint256(chainId),
+                                 .array(.uint256, collateralAmounts),
+                                 .array(.string, collateralAssetSymbols),
+                                 .address(comet),
+                                 .bool(preferAcross)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple4(.bool(isToken),
+                                                                                                                         .string(currency),
+                                                                                                                         .bytes32(quoteId),
+                                                                                                                         .array(PaymentInfo.PaymentMaxCost.schema, maxCosts))):
+            return try (CometActionsBuilder.CometBorrowIntent(amount: amount, assetSymbol: assetSymbol, blockTimestamp: blockTimestamp, borrower: borrower, chainId: chainId, collateralAmounts: collateralAmounts.map { $0.asBigUInt! }, collateralAssetSymbols: collateralAssetSymbols.map { $0.asString! }, comet: comet, preferAcross: preferAcross), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, PaymentInfo.Payment(isToken: isToken, currency: currency, quoteId: quoteId, maxCosts: maxCosts.map { try PaymentInfo.PaymentMaxCost.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, cometBorrowFn.inputTuple)
         }
     }
 
@@ -2348,6 +2379,27 @@ public enum QuarkBuilder {
         }
     }
 
+    public static func cometRepayDecode(input: Hex) throws -> (CometActionsBuilder.CometRepayIntent, [Accounts.ChainAccounts], PaymentInfo.Payment) {
+        let decodedInput = try cometRepayFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple9(.uint256(amount),
+                                 .string(assetSymbol),
+                                 .uint256(blockTimestamp),
+                                 .uint256(chainId),
+                                 .array(.uint256, collateralAmounts),
+                                 .array(.string, collateralAssetSymbols),
+                                 .address(comet),
+                                 .address(repayer),
+                                 .bool(preferAcross)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple4(.bool(isToken),
+                                                                                                                         .string(currency),
+                                                                                                                         .bytes32(quoteId),
+                                                                                                                         .array(PaymentInfo.PaymentMaxCost.schema, maxCosts))):
+            return try (CometActionsBuilder.CometRepayIntent(amount: amount, assetSymbol: assetSymbol, blockTimestamp: blockTimestamp, chainId: chainId, collateralAmounts: collateralAmounts.map { $0.asBigUInt! }, collateralAssetSymbols: collateralAssetSymbols.map { $0.asString! }, comet: comet, repayer: repayer, preferAcross: preferAcross), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, PaymentInfo.Payment(isToken: isToken, currency: currency, quoteId: quoteId, maxCosts: maxCosts.map { try PaymentInfo.PaymentMaxCost.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, cometRepayFn.inputTuple)
+        }
+    }
+
     public static let cometSupplyFn = ABI.Function(
         name: "cometSupply",
         inputs: [.tuple([.uint256, .string, .uint256, .uint256, .address, .address, .bool, .string]), .array(.tuple([.uint256, .array(Accounts.QuarkSecret.schema), .array(Accounts.AssetPositions.schema), .array(Accounts.CometPositions.schema), .array(Accounts.MorphoPositions.schema), .array(Accounts.MorphoVaultPositions.schema)])), .tuple([.bytes32, .uint256, .uint256, .array(Quotes.AssetQuote.schema), .array(Quotes.NetworkOperationFee.schema)])],
@@ -2378,6 +2430,27 @@ public enum QuarkBuilder {
             }
         } catch let EVM.QueryError.error(e, v) {
             return .failure(rewrapError(e, value: v))
+        }
+    }
+
+    public static func cometSupplyDecode(input: Hex) throws -> (CometActionsBuilder.CometSupplyIntent, [Accounts.ChainAccounts], Quotes.Quote) {
+        let decodedInput = try cometSupplyFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple8(.uint256(amount),
+                                 .string(assetSymbol),
+                                 .uint256(blockTimestamp),
+                                 .uint256(chainId),
+                                 .address(comet),
+                                 .address(sender),
+                                 .bool(preferAcross),
+                                 .string(paymentAssetSymbol)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple5(.bytes32(quoteId),
+                                                                                                                                 .uint256(issuedAt),
+                                                                                                                                 .uint256(expiresAt),
+                                                                                                                                 .array(Quotes.AssetQuote.schema, assetQuotes),
+                                                                                                                                 .array(Quotes.NetworkOperationFee.schema, networkOperationFees))):
+            return try (CometActionsBuilder.CometSupplyIntent(amount: amount, assetSymbol: assetSymbol, blockTimestamp: blockTimestamp, chainId: chainId, comet: comet, sender: sender, preferAcross: preferAcross, paymentAssetSymbol: paymentAssetSymbol), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, Quotes.Quote(quoteId: quoteId, issuedAt: issuedAt, expiresAt: expiresAt, assetQuotes: assetQuotes.map { try Quotes.AssetQuote.decodeValue($0) }, networkOperationFees: networkOperationFees.map { try Quotes.NetworkOperationFee.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, cometSupplyFn.inputTuple)
         }
     }
 
@@ -2414,6 +2487,25 @@ public enum QuarkBuilder {
         }
     }
 
+    public static func cometWithdrawDecode(input: Hex) throws -> (CometActionsBuilder.CometWithdrawIntent, [Accounts.ChainAccounts], PaymentInfo.Payment) {
+        let decodedInput = try cometWithdrawFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple7(.uint256(amount),
+                                 .string(assetSymbol),
+                                 .uint256(blockTimestamp),
+                                 .uint256(chainId),
+                                 .address(comet),
+                                 .address(withdrawer),
+                                 .bool(preferAcross)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple4(.bool(isToken),
+                                                                                                                         .string(currency),
+                                                                                                                         .bytes32(quoteId),
+                                                                                                                         .array(PaymentInfo.PaymentMaxCost.schema, maxCosts))):
+            return try (CometActionsBuilder.CometWithdrawIntent(amount: amount, assetSymbol: assetSymbol, blockTimestamp: blockTimestamp, chainId: chainId, comet: comet, withdrawer: withdrawer, preferAcross: preferAcross), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, PaymentInfo.Payment(isToken: isToken, currency: currency, quoteId: quoteId, maxCosts: maxCosts.map { try PaymentInfo.PaymentMaxCost.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, cometWithdrawFn.inputTuple)
+        }
+    }
+
     public static let includeErrorsFn = ABI.Function(
         name: "includeErrors",
         inputs: [],
@@ -2434,6 +2526,16 @@ public enum QuarkBuilder {
             }
         } catch let EVM.QueryError.error(e, v) {
             return .failure(rewrapError(e, value: v))
+        }
+    }
+
+    public static func includeErrorsDecode(input: Hex) throws {
+        let decodedInput = try includeErrorsFn.decodeInput(input: input)
+        switch decodedInput {
+        case .tuple0:
+            return ()
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, includeErrorsFn.inputTuple)
         }
     }
 
@@ -2470,6 +2572,26 @@ public enum QuarkBuilder {
         }
     }
 
+    public static func morphoBorrowDecode(input: Hex) throws -> (MorphoActionsBuilder.MorphoBorrowIntent, [Accounts.ChainAccounts], PaymentInfo.Payment) {
+        let decodedInput = try morphoBorrowFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple8(.uint256(amount),
+                                 .string(assetSymbol),
+                                 .uint256(blockTimestamp),
+                                 .address(borrower),
+                                 .uint256(chainId),
+                                 .uint256(collateralAmount),
+                                 .string(collateralAssetSymbol),
+                                 .bool(preferAcross)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple4(.bool(isToken),
+                                                                                                                         .string(currency),
+                                                                                                                         .bytes32(quoteId),
+                                                                                                                         .array(PaymentInfo.PaymentMaxCost.schema, maxCosts))):
+            return try (MorphoActionsBuilder.MorphoBorrowIntent(amount: amount, assetSymbol: assetSymbol, blockTimestamp: blockTimestamp, borrower: borrower, chainId: chainId, collateralAmount: collateralAmount, collateralAssetSymbol: collateralAssetSymbol, preferAcross: preferAcross), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, PaymentInfo.Payment(isToken: isToken, currency: currency, quoteId: quoteId, maxCosts: maxCosts.map { try PaymentInfo.PaymentMaxCost.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, morphoBorrowFn.inputTuple)
+        }
+    }
+
     public static let morphoClaimRewardsFn = ABI.Function(
         name: "morphoClaimRewards",
         inputs: [.tuple([.uint256, .address, .uint256, .array(.address), .array(.uint256), .array(.address), .array(.address), .array(.bytes32), .bool]), .array(.tuple([.uint256, .array(Accounts.QuarkSecret.schema), .array(Accounts.AssetPositions.schema), .array(Accounts.CometPositions.schema), .array(Accounts.MorphoPositions.schema), .array(Accounts.MorphoVaultPositions.schema)])), .tuple([.bool, .string, .bytes32, .array(PaymentInfo.PaymentMaxCost.schema)])],
@@ -2500,6 +2622,27 @@ public enum QuarkBuilder {
             }
         } catch let EVM.QueryError.error(e, v) {
             return .failure(rewrapError(e, value: v))
+        }
+    }
+
+    public static func morphoClaimRewardsDecode(input: Hex) throws -> (MorphoActionsBuilder.MorphoRewardsClaimIntent, [Accounts.ChainAccounts], PaymentInfo.Payment) {
+        let decodedInput = try morphoClaimRewardsFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple9(.uint256(blockTimestamp),
+                                 .address(claimer),
+                                 .uint256(chainId),
+                                 .array(.address, accounts),
+                                 .array(.uint256, claimables),
+                                 .array(.address, distributors),
+                                 .array(.address, rewards),
+                                 .array(.bytes32, proofs),
+                                 .bool(preferAcross)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple4(.bool(isToken),
+                                                                                                                         .string(currency),
+                                                                                                                         .bytes32(quoteId),
+                                                                                                                         .array(PaymentInfo.PaymentMaxCost.schema, maxCosts))):
+            return try (MorphoActionsBuilder.MorphoRewardsClaimIntent(blockTimestamp: blockTimestamp, claimer: claimer, chainId: chainId, accounts: accounts.map { $0.asEthAddress! }, claimables: claimables.map { $0.asBigUInt! }, distributors: distributors.map { $0.asEthAddress! }, rewards: rewards.map { $0.asEthAddress! }, proofs: proofs.map { $0.asHex! }, preferAcross: preferAcross), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, PaymentInfo.Payment(isToken: isToken, currency: currency, quoteId: quoteId, maxCosts: maxCosts.map { try PaymentInfo.PaymentMaxCost.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, morphoClaimRewardsFn.inputTuple)
         }
     }
 
@@ -2536,6 +2679,26 @@ public enum QuarkBuilder {
         }
     }
 
+    public static func morphoRepayDecode(input: Hex) throws -> (MorphoActionsBuilder.MorphoRepayIntent, [Accounts.ChainAccounts], PaymentInfo.Payment) {
+        let decodedInput = try morphoRepayFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple8(.uint256(amount),
+                                 .string(assetSymbol),
+                                 .uint256(blockTimestamp),
+                                 .address(repayer),
+                                 .uint256(chainId),
+                                 .uint256(collateralAmount),
+                                 .string(collateralAssetSymbol),
+                                 .bool(preferAcross)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple4(.bool(isToken),
+                                                                                                                         .string(currency),
+                                                                                                                         .bytes32(quoteId),
+                                                                                                                         .array(PaymentInfo.PaymentMaxCost.schema, maxCosts))):
+            return try (MorphoActionsBuilder.MorphoRepayIntent(amount: amount, assetSymbol: assetSymbol, blockTimestamp: blockTimestamp, repayer: repayer, chainId: chainId, collateralAmount: collateralAmount, collateralAssetSymbol: collateralAssetSymbol, preferAcross: preferAcross), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, PaymentInfo.Payment(isToken: isToken, currency: currency, quoteId: quoteId, maxCosts: maxCosts.map { try PaymentInfo.PaymentMaxCost.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, morphoRepayFn.inputTuple)
+        }
+    }
+
     public static let morphoVaultSupplyFn = ABI.Function(
         name: "morphoVaultSupply",
         inputs: [.tuple([.uint256, .string, .uint256, .address, .uint256, .bool]), .array(.tuple([.uint256, .array(Accounts.QuarkSecret.schema), .array(Accounts.AssetPositions.schema), .array(Accounts.CometPositions.schema), .array(Accounts.MorphoPositions.schema), .array(Accounts.MorphoVaultPositions.schema)])), .tuple([.bool, .string, .bytes32, .array(PaymentInfo.PaymentMaxCost.schema)])],
@@ -2566,6 +2729,24 @@ public enum QuarkBuilder {
             }
         } catch let EVM.QueryError.error(e, v) {
             return .failure(rewrapError(e, value: v))
+        }
+    }
+
+    public static func morphoVaultSupplyDecode(input: Hex) throws -> (MorphoVaultActionsBuilder.MorphoVaultSupplyIntent, [Accounts.ChainAccounts], PaymentInfo.Payment) {
+        let decodedInput = try morphoVaultSupplyFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple6(.uint256(amount),
+                                 .string(assetSymbol),
+                                 .uint256(blockTimestamp),
+                                 .address(sender),
+                                 .uint256(chainId),
+                                 .bool(preferAcross)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple4(.bool(isToken),
+                                                                                                                         .string(currency),
+                                                                                                                         .bytes32(quoteId),
+                                                                                                                         .array(PaymentInfo.PaymentMaxCost.schema, maxCosts))):
+            return try (MorphoVaultActionsBuilder.MorphoVaultSupplyIntent(amount: amount, assetSymbol: assetSymbol, blockTimestamp: blockTimestamp, sender: sender, chainId: chainId, preferAcross: preferAcross), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, PaymentInfo.Payment(isToken: isToken, currency: currency, quoteId: quoteId, maxCosts: maxCosts.map { try PaymentInfo.PaymentMaxCost.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, morphoVaultSupplyFn.inputTuple)
         }
     }
 
@@ -2602,6 +2783,24 @@ public enum QuarkBuilder {
         }
     }
 
+    public static func morphoVaultWithdrawDecode(input: Hex) throws -> (MorphoVaultActionsBuilder.MorphoVaultWithdrawIntent, [Accounts.ChainAccounts], PaymentInfo.Payment) {
+        let decodedInput = try morphoVaultWithdrawFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple6(.uint256(amount),
+                                 .string(assetSymbol),
+                                 .uint256(blockTimestamp),
+                                 .uint256(chainId),
+                                 .address(withdrawer),
+                                 .bool(preferAcross)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple4(.bool(isToken),
+                                                                                                                         .string(currency),
+                                                                                                                         .bytes32(quoteId),
+                                                                                                                         .array(PaymentInfo.PaymentMaxCost.schema, maxCosts))):
+            return try (MorphoVaultActionsBuilder.MorphoVaultWithdrawIntent(amount: amount, assetSymbol: assetSymbol, blockTimestamp: blockTimestamp, chainId: chainId, withdrawer: withdrawer, preferAcross: preferAcross), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, PaymentInfo.Payment(isToken: isToken, currency: currency, quoteId: quoteId, maxCosts: maxCosts.map { try PaymentInfo.PaymentMaxCost.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, morphoVaultWithdrawFn.inputTuple)
+        }
+    }
+
     public static let recurringSwapFn = ABI.Function(
         name: "recurringSwap",
         inputs: [.tuple([.uint256, .address, .uint256, .address, .uint256, .bool, .bytes, .uint256, .address, .uint256, .bool]), .array(.tuple([.uint256, .array(Accounts.QuarkSecret.schema), .array(Accounts.AssetPositions.schema), .array(Accounts.CometPositions.schema), .array(Accounts.MorphoPositions.schema), .array(Accounts.MorphoVaultPositions.schema)])), .tuple([.bool, .string, .bytes32, .array(PaymentInfo.PaymentMaxCost.schema)])],
@@ -2632,6 +2831,29 @@ public enum QuarkBuilder {
             }
         } catch let EVM.QueryError.error(e, v) {
             return .failure(rewrapError(e, value: v))
+        }
+    }
+
+    public static func recurringSwapDecode(input: Hex) throws -> (SwapActionsBuilder.RecurringSwapIntent, [Accounts.ChainAccounts], PaymentInfo.Payment) {
+        let decodedInput = try recurringSwapFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple11(.uint256(chainId),
+                                  .address(sellToken),
+                                  .uint256(sellAmount),
+                                  .address(buyToken),
+                                  .uint256(buyAmount),
+                                  .bool(isExactOut),
+                                  .bytes(path),
+                                  .uint256(interval),
+                                  .address(sender),
+                                  .uint256(blockTimestamp),
+                                  .bool(preferAcross)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple4(.bool(isToken),
+                                                                                                                          .string(currency),
+                                                                                                                          .bytes32(quoteId),
+                                                                                                                          .array(PaymentInfo.PaymentMaxCost.schema, maxCosts))):
+            return try (SwapActionsBuilder.RecurringSwapIntent(chainId: chainId, sellToken: sellToken, sellAmount: sellAmount, buyToken: buyToken, buyAmount: buyAmount, isExactOut: isExactOut, path: path, interval: interval, sender: sender, blockTimestamp: blockTimestamp, preferAcross: preferAcross), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, PaymentInfo.Payment(isToken: isToken, currency: currency, quoteId: quoteId, maxCosts: maxCosts.map { try PaymentInfo.PaymentMaxCost.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, recurringSwapFn.inputTuple)
         }
     }
 
@@ -2668,6 +2890,31 @@ public enum QuarkBuilder {
         }
     }
 
+    public static func swapDecode(input: Hex) throws -> (SwapActionsBuilder.ZeroExSwapIntent, [Accounts.ChainAccounts], PaymentInfo.Payment) {
+        let decodedInput = try swapFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple13(.uint256(chainId),
+                                  .address(entryPoint),
+                                  .bytes(swapData),
+                                  .address(sellToken),
+                                  .uint256(sellAmount),
+                                  .address(buyToken),
+                                  .uint256(buyAmount),
+                                  .address(feeToken),
+                                  .uint256(feeAmount),
+                                  .address(sender),
+                                  .bool(isExactOut),
+                                  .uint256(blockTimestamp),
+                                  .bool(preferAcross)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple4(.bool(isToken),
+                                                                                                                          .string(currency),
+                                                                                                                          .bytes32(quoteId),
+                                                                                                                          .array(PaymentInfo.PaymentMaxCost.schema, maxCosts))):
+            return try (SwapActionsBuilder.ZeroExSwapIntent(chainId: chainId, entryPoint: entryPoint, swapData: swapData, sellToken: sellToken, sellAmount: sellAmount, buyToken: buyToken, buyAmount: buyAmount, feeToken: feeToken, feeAmount: feeAmount, sender: sender, isExactOut: isExactOut, blockTimestamp: blockTimestamp, preferAcross: preferAcross), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, PaymentInfo.Payment(isToken: isToken, currency: currency, quoteId: quoteId, maxCosts: maxCosts.map { try PaymentInfo.PaymentMaxCost.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, swapFn.inputTuple)
+        }
+    }
+
     public static let transferFn = ABI.Function(
         name: "transfer",
         inputs: [.tuple([.uint256, .string, .uint256, .address, .address, .uint256, .bool, .string]), .array(.tuple([.uint256, .array(Accounts.QuarkSecret.schema), .array(Accounts.AssetPositions.schema), .array(Accounts.CometPositions.schema), .array(Accounts.MorphoPositions.schema), .array(Accounts.MorphoVaultPositions.schema)])), .tuple([.bytes32, .uint256, .uint256, .array(Quotes.AssetQuote.schema), .array(Quotes.NetworkOperationFee.schema)])],
@@ -2698,6 +2945,27 @@ public enum QuarkBuilder {
             }
         } catch let EVM.QueryError.error(e, v) {
             return .failure(rewrapError(e, value: v))
+        }
+    }
+
+    public static func transferDecode(input: Hex) throws -> (TransferActionsBuilder.TransferIntent, [Accounts.ChainAccounts], Quotes.Quote) {
+        let decodedInput = try transferFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.tuple8(.uint256(chainId),
+                                 .string(assetSymbol),
+                                 .uint256(amount),
+                                 .address(sender),
+                                 .address(recipient),
+                                 .uint256(blockTimestamp),
+                                 .bool(preferAcross),
+                                 .string(paymentAssetSymbol)), .array(Accounts.ChainAccounts.schema, chainAccountsList), .tuple5(.bytes32(quoteId),
+                                                                                                                                 .uint256(issuedAt),
+                                                                                                                                 .uint256(expiresAt),
+                                                                                                                                 .array(Quotes.AssetQuote.schema, assetQuotes),
+                                                                                                                                 .array(Quotes.NetworkOperationFee.schema, networkOperationFees))):
+            return try (TransferActionsBuilder.TransferIntent(chainId: chainId, assetSymbol: assetSymbol, amount: amount, sender: sender, recipient: recipient, blockTimestamp: blockTimestamp, preferAcross: preferAcross, paymentAssetSymbol: paymentAssetSymbol), chainAccountsList.map { try Accounts.ChainAccounts.decodeValue($0) }, Quotes.Quote(quoteId: quoteId, issuedAt: issuedAt, expiresAt: expiresAt, assetQuotes: assetQuotes.map { try Quotes.AssetQuote.decodeValue($0) }, networkOperationFees: networkOperationFees.map { try Quotes.NetworkOperationFee.decodeValue($0) }))
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, transferFn.inputTuple)
         }
     }
 }

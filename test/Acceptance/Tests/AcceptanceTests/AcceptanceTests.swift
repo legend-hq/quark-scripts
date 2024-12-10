@@ -50,35 +50,21 @@ enum Call: Equatable {
 
     static func tryDecodeCall(scriptAddress: EthAddress, calldata: Hex) -> Call {
         if scriptAddress == getScriptAddress(TransferActions.creationCode) {
-            switch try? TransferActions.transferERC20TokenFn.decodeInput(input: calldata) {
-            case let .tuple3(.address(token), .address(recipient), .uint256(amount)):
+            if let (token, recipient, amount) = try? TransferActions.transferERC20TokenDecode(input: calldata) {
                 return .transferErc20(tokenAmount: Token.getTokenAmount(amount: amount, address: token), recipient: Account.from(address: recipient))
-            default:
-                break
             }
         }
 
         if scriptAddress == getScriptAddress(QuotePay.creationCode) {
-            switch try? QuotePay.payFn.decodeInput(input: calldata) {
-            case let .tuple4(.address(payee), .address(paymentToken), .uint256(quotedAmount), .bytes32(quoteId)):
+            if let (payee, paymentToken, quotedAmount, quoteId) = try? QuotePay.payDecode(input: calldata) {
                 return .quotePay(payment: Token.getTokenAmount(amount: quotedAmount, address: paymentToken), payee: Account.from(address: payee), quote: Quote.findQuote(quoteId: quoteId, prices: [:], fees: [:]))
-            default:
-                break
             }
         }
 
         if scriptAddress == getScriptAddress(Multicall.creationCode) {
-            switch try? Multicall.runFn.decodeInput(input: calldata) {
-            case let .tuple2(.array(.address, callContracts), .array(.bytes, callDatas)):
-                let calls = zip(callContracts, callDatas).map { switch ($0, $1) {
-                case let (.address(scriptAddressInner), .bytes(calldataInner)):
-                    return Call.tryDecodeCall(scriptAddress: scriptAddressInner, calldata: calldataInner)
-                default:
-                    fatalError("Mismatched types for Multicall: \(($0.schema, $1.schema))")
-                } }
+            if let (callContracts, callDatas) = try? Multicall.runDecode(input: calldata) {
+                let calls = zip(callContracts, callDatas).map { Call.tryDecodeCall(scriptAddress: $0, calldata: $1) }
                 return .multicall(calls)
-            default:
-                break
             }
         }
 

@@ -58,6 +58,16 @@ public enum TransferActions {
         }
     }
 
+    public static func transferERC20TokenDecode(input: Hex) throws -> (EthAddress, EthAddress, BigUInt) {
+        let decodedInput = try transferERC20TokenFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple3(.address(token), .address(recipient), .uint256(amount)):
+            return (token, recipient, amount)
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, transferERC20TokenFn.inputTuple)
+        }
+    }
+
     public static let transferNativeTokenFn = ABI.Function(
         name: "transferNativeToken",
         inputs: [.address, .uint256],
@@ -78,6 +88,16 @@ public enum TransferActions {
             }
         } catch let EVM.QueryError.error(e, v) {
             return .failure(rewrapError(e, value: v))
+        }
+    }
+
+    public static func transferNativeTokenDecode(input: Hex) throws -> (EthAddress, BigUInt) {
+        let decodedInput = try transferNativeTokenFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple2(.address(recipient), .uint256(amount)):
+            return (recipient, amount)
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, transferNativeTokenFn.inputTuple)
         }
     }
 }

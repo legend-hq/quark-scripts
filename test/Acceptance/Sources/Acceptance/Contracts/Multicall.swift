@@ -69,18 +69,24 @@ public enum Multicall {
 
             switch decoded {
             case let .tuple1(.array(.bytes, var0)):
-                let res = try var0.map { switch $0 {
-                case let .bytes(value):
-                    return value
-                default:
-                    throw ABI.DecodeError.mismatchedType($0.schema, .bytes)
-                } }
-                return .success(res)
+                return .success(var0.map {
+                    $0.asHex!
+                })
             default:
                 throw ABI.DecodeError.mismatchedType(decoded.schema, runFn.outputTuple)
             }
         } catch let EVM.QueryError.error(e, v) {
             return .failure(rewrapError(e, value: v))
+        }
+    }
+
+    public static func runDecode(input: Hex) throws -> ([EthAddress], [Hex]) {
+        let decodedInput = try runFn.decodeInput(input: input)
+        switch decodedInput {
+        case let .tuple2(.array(.address, callContracts), .array(.bytes, callDatas)):
+            return (callContracts.map { $0.asEthAddress! }, callDatas.map { $0.asHex! })
+        default:
+            throw ABI.DecodeError.mismatchedType(decodedInput.schema, runFn.inputTuple)
         }
     }
 }
