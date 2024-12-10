@@ -21,19 +21,47 @@ func getTests() -> [AcceptanceTest] {
                     .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
                 ]))
         ),
+        // .init(
+        //     name: "Alice transfers 10 USDC to Bob on Ethereum",
+        //     given: [
+        //         .tokenBalance(.alice, .amt(100, .usdc), .ethereum),
+        //         .quote(.basic),
+        //     ],
+        //     when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .ethereum),
+        //     expect: .single(
+        //         .multicall([
+        //             .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
+        //             .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
+        //         ]))
+        // ),
+        // .init(
+        //     name: "Alice transfers 10 USDC to Bob via Bridge",
+        //     given: [
+        //         .tokenBalance(.alice, .amt(100, .usdc), .arbitrum),
+        //         .quote(.basic),
+        //     ],
+        //     when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .arbitrum),
+        //     expect: .single(
+        //         .multicall([
+        //             .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
+        //             .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
+        //         ])),
+        //     only: true
+        // ),
         .init(
-            name: "Alice transfers 10 USDC to Bob via Bridge",
+            name: "Alice supplies 0.5 ETH to cUSDCv3 on Ethereum",
             given: [
-                .tokenBalance(.alice, .amt(100, .usdc), .arbitrum),
-                .quote(.basic),
+                .tokenBalance(.alice, .amt(1.0, .eth), .ethereum),
+                .quote(.basic)
             ],
-            when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .arbitrum),
+            when: .payWith(currency: .eth, intent: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(0.5, .eth), on: .ethereum)),
             expect: .single(
                 .multicall([
-                    .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
-                    .quotePay(payment: .amt(0.04, .usdc), payee: .stax, quote: .basic),
-                ]))
-        )
+                    .supplyToComet(tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
+                    .quotePay(payment: .amt(0.10, .eth), payee: .stax, quote: .basic)
+                ])
+            )
+        ),
     ]
 }
 
@@ -41,6 +69,7 @@ enum Call: Equatable {
     case bridge(
         bridge: String, srcNetwork: Network, destinationNetwork: Network, tokenAmount: TokenAmount)
     case transferErc20(tokenAmount: TokenAmount, recipient: Account)
+    case supplyToComet(tokenAmount: TokenAmount, market: Comet, network: Network)
     case quotePay(payment: TokenAmount, payee: Account, quote: Quote)
     case multicall(_ calls: [Call])
     case unknownFunctionCall(String, String, ABI.Value)
@@ -132,6 +161,11 @@ enum Call: Equatable {
             }
         }
 
+        if scriptAddress == getScriptAddress(CometActions.creationCode) {
+            print("Decode CometActions")
+            // TODO: after geno'ing swift bindings for comet actions
+        }
+
         for (name, creationCode, functions) in Call.allFunctions {
             if scriptAddress == getScriptAddress(creationCode) {
                 for function in functions {
@@ -155,6 +189,9 @@ enum Call: Equatable {
         case let .quotePay(payment, payee, quoteId):
             return
                 "quotePay(\(payment.amount) \(payment.token.symbol) to \(payee.description), quoteId: \(quoteId))"
+        case let .supplyToComet(tokenAmount, market, network):
+            return
+                "supplyToComet(\(tokenAmount.amount) \(tokenAmount.token.symbol) to \(market.description) on \(network.description))"
         case let .multicall(calls):
             return "multicall(\(calls.map { $0.description }.joined(separator: ", ")))"
         case let .unknownFunctionCall(name, function, value):
@@ -242,7 +279,9 @@ enum Comet: Equatable {
         // eventually this should be migrated to use builderpack instead.
         case (.ethereum, .cusdcv3):
             return EthAddress("0xc3d688B66703497DAA19211EEdff47f25384cdc3")
-        case (_, .unknownComet(address)):
+        case (_, .cusdcv3):
+            fatalError("no market .cusdcv3 for network \(network.description)")
+        case let (_, .unknownComet(address)):
             return address
         }
     }
@@ -251,20 +290,18 @@ enum Comet: Equatable {
         switch self {
         case .cusdcv3:
             return "cUSDCv3"
-        case .unknownComet(address):
-            return address
+        case let .unknownComet(address):
+            return "Comet at \(address.description)"
         }
     }
 
     static func from(address: EthAddress) -> Comet {
-        for knownNetwork in Network.knownCases {
-            for knownCase in Comet.knownCases {
-                if address == knownCase.address {
-                    return knownCase
-                }
-            }
+        switch (address) {
+        case "0xc3d688B66703497DAA19211EEdff47f25384cdc3":
+            return .cusdcv3
+        case _:
+            return .unknownComet(address)
         }
-        return .unknownComet(address)
     }
 }
 
@@ -281,7 +318,8 @@ enum Quote: Hashable, Equatable {
         case .basic:
             return (
                 Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
-                [.usdc: 1.0], [.ethereum: 0.10, .base: 0.02, .arbitrum: 0.04]
+                [.usdc: 1.0, .eth: 4000.0],
+                [.ethereum: 0.10, .base: 0.02, .arbitrum: 0.04]
             )
         }
     }
@@ -426,14 +464,28 @@ enum Given {
     case quote(Quote)
 }
 
-enum When {
+indirect enum When {
     case transfer(from: Account, to: Account, amount: TokenAmount, on: Network)
-    case cometSupply(from: Account, market: Comet, amount: TokenAmount)
+    case cometSupply(from: Account, market: Comet, amount: TokenAmount, on: Network)
+    case payWith(currency: Token, intent: When)
 
     var sender: Account {
         switch self {
         case let .transfer(from, _, _, _):
             return from
+        case let .cometSupply(from, _, _, _):
+            return from
+        case let .payWith(_, intent):
+            return intent.sender
+        }
+    }
+
+    var paymentAssetSymbol: String {
+        switch self {
+        case let .payWith(token, _):
+            return token.symbol
+        case _:
+            return "USDC"
         }
     }
 }
@@ -472,6 +524,7 @@ class Context {
     var chainAccounts: [QuarkBuilder.Accounts.ChainAccounts]
     var prices: [Token: Float]
     var fees: [Network: Float]
+    var paymentToken: Token?
 
     let allNetworks: [Network] = [.ethereum, .base, .arbitrum]
 
@@ -479,9 +532,9 @@ class Context {
         chainAccounts = []
         prices = [:]
         fees = [:]
+        paymentToken = .none
 
-
-        let combinations = zip(Token.knownCases.map { a in allNetworks.map { b in (a, b) } }.joined(), 
+        let combinations = zip(Token.knownCases.map { a in allNetworks.map { b in (a, b) } }.joined(),
                       allNetworks.map { b in Token.knownCases.map { a in (a, b) } }.joined())
         for network in allNetworks {
             chainAccounts.append(
@@ -558,6 +611,40 @@ class Context {
         QuarkBuilder.QuarkBuilderBase.BuilderResult, QuarkBuilder.RevertReason
     > {
         switch when {
+        case let .payWith(token, intent):
+            paymentToken = token
+            return try await self.when(intent)
+
+        case let .cometSupply(from, market, amount, network):
+            return try await QuarkBuilder.cometSupply(
+                cometSupplyIntent: .init(
+                    amount: toWei(tokenAmount: amount),
+                    assetSymbol: amount.token.symbol,
+                    blockTimestamp: 0,
+                    chainId: BigUInt(network.chainId),
+                    comet: market.address(network: network),
+                    sender: from.address,
+                    preferAcross: false,
+                    paymentAssetSymbol: paymentToken?.symbol ?? when.paymentAssetSymbol
+                ),
+                chainAccountsList: chainAccounts,
+                quote: .init(
+                    quoteId: Hex(
+                        "0x00000000000000000000000000000000000000000000000000000000000000BB"),
+                    issuedAt: 0,
+                    expiresAt: BigUInt(Date(timeIntervalSinceNow: 1_000_000).timeIntervalSince1970),
+                    assetQuotes: prices.map {
+                        .init(symbol: $0.key.symbol, price: BigUInt($0.value * 1e8))
+                    },
+                    networkOperationFees: fees.map {
+                        .init(
+                            chainId: BigUInt($0.key.chainId),
+                            opType: "BASELINE",
+                            price: BigUInt($0.value * 1e8))
+                    }
+                )
+            )
+
         case let .transfer(from, to, amount, network):
             // dump("ARE THESE HERE? \(chainAccounts)")
 
@@ -571,7 +658,7 @@ class Context {
                     recipient: to.address,
                     blockTimestamp: 0,
                     preferAcross: false,
-                    paymentAssetSymbol: "USDC"
+                    paymentAssetSymbol: paymentToken?.symbol ?? when.paymentAssetSymbol
                 ),
                 chainAccountsList: chainAccounts,
                 quote: .init(
@@ -637,7 +724,7 @@ func customFatalError(_ message: String, file: String = #file, line: Int = #line
                 #expect(builderResult.quarkOperations.count == 1)  // TODO: Check number of operations?
                 #expect(builderResult.actions.count == 1)  // TODO: Check number of actions?
                 // #expect(builderResult.eip712Data.domainSeparator == EIP712Helper.DomainSeparator(name: "Quark", version: "1")) // TODO: Check domain separator?
-                #expect(builderResult.paymentCurrency == "USDC")  // TODO: Check payment currency?
+                #expect(builderResult.paymentCurrency == context.paymentToken?.symbol ?? "USDC")
 
                 // TODO: Handle multiple quark operations
                 let operation: QuarkBuilder.IQuarkWallet.QuarkOperation =
