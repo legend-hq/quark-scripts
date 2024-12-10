@@ -5,37 +5,38 @@ import Foundation
 import SwiftKeccak
 import Testing
 
-func getTests() -> [AcceptanceTest] {
-    return [
-        .init(
-            name: "Alice transfers 10 USDC to Bob on Ethereum",
-            given: [
-                .tokenBalance(.alice, .amt(100, .usdc), .ethereum),
-                .quote(.basic),
-            ],
-            when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .ethereum),
-            expect: .single(.multicall([
-                .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
-                .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
-            ]))
-        ),
-        .init(
-            name: "Alice transfers 10 USDC to Bob via Bridge",
-            given: [
-                .tokenBalance(.alice, .amt(100, .usdc), .arbitrum),
-                .quote(.basic),
-            ],
-            when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .arbitrum),
-            expect: .single(.multicall([
-                .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
-                .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
-            ])),
-            only: true
-        ),
-    ]
-}
+let allTests: [AcceptanceTest] = [
+    .init(
+        name: "Alice transfers 10 USDC to Bob on Ethereum",
+        given: [
+            .tokenBalance(.alice, .amt(100, .usdc), .ethereum),
+            .quote(.basic),
+        ],
+        when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .ethereum),
+        expect: .single(.multicall([
+            .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
+            .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
+        ])),
+        only: true
+    ),
+    .init(
+        name: "Alice transfers 10 USDC to Bob via Bridge",
+        given: [
+            .tokenBalance(.alice, .amt(100, .usdc), .arbitrum),
+            .quote(.basic),
+        ],
+        when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .arbitrum),
+        expect: .single(.multicall([
+            .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
+            .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
+        ]))
+    ),
+]
 
-enum Call: Equatable {
+let tests = allTests.filter { !$0.skip }
+let filteredTests = tests.contains { $0.only } ? tests.filter { $0.only } : tests
+
+enum Call: CustomStringConvertible, Equatable {
     case transferErc20(tokenAmount: TokenAmount, recipient: Account)
     case quotePay(payment: TokenAmount, payee: Account, quote: Quote)
     case multicall(_ calls: [Call])
@@ -92,6 +93,15 @@ enum Call: Equatable {
             return "unknownFunctionCall(\(name), \(function), \(value))"
         case let .unknownScriptCall(scriptSource, calldata):
             return "unknownScriptCall(\(scriptSource.description), \(calldata.description))"
+        }
+    }
+
+    var descriptionExt: String {
+        switch self {
+        case let .multicall(calls):
+            return "multicall:\n\(calls.map { "\n\t\t- \($0.descriptionExt)" }.joined(separator: "\n"))\n"
+        default:
+            return description
         }
     }
 }
@@ -320,7 +330,7 @@ enum Expect {
     case single(Call)
 }
 
-class AcceptanceTest {
+final class AcceptanceTest: CustomTestArgumentEncodable, CustomStringConvertible, Sendable {
     let name: String
     let given: [Given]
     let when: When
@@ -339,6 +349,15 @@ class AcceptanceTest {
         if only, skip {
             fatalError("Cannot set both `only` and `skip` for a test")
         }
+    }
+
+    func encodeTestArgument(to encoder: some Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(name)
+    }
+
+    var description: String {
+        return name
     }
 }
 
@@ -363,7 +382,6 @@ class Context {
                 morphoVaultPositions: []
             ))
         }
-        print(chainAccounts)
     }
 
     func given(_ given: Given) {
@@ -403,7 +421,6 @@ class Context {
     func when(_ when: When) async throws -> Result<QuarkBuilder.QuarkBuilderBase.BuilderResult, QuarkBuilder.RevertReason> {
         switch when {
         case let .transfer(from, to, amount, network):
-            print(chainAccounts)
             return try await QuarkBuilder.transfer(
                 transferIntent: .init(
                     chainId: BigUInt(network.chainId),
@@ -427,10 +444,18 @@ class Context {
             )
         }
     }
+}
 
-    func expect(_ expect: Expect) throws {
-        print(expect)
-    }
+enum ANSIColor: String {
+    case red = "\u{001B}[31m"
+    case green = "\u{001B}[32m"
+    case yellow = "\u{001B}[33m"
+    case blue = "\u{001B}[34m"
+    case reset = "\u{001B}[0m"
+}
+
+func colorize(_ text: String, with color: ANSIColor) -> String {
+    return "\(color.rawValue)\(text)\(ANSIColor.reset.rawValue)"
 }
 
 @Test func testCreate2Address() {
@@ -438,23 +463,28 @@ class Context {
     #expect(address == EthAddress("0x103B7e61BBaa2F62028Ebf3Ea7C47dC74Bd3a617"))
 }
 
-@Test func testAcceptanceTests() async throws {
-    let tests = getTests().filter { !$0.skip }
-    let filteredTests = tests.contains { $0.only } ? tests.filter { $0.only } : tests
-
+@Test("Acceptance Tests", arguments: filteredTests)
+func testAcceptanceTests(test: AcceptanceTest) async throws {
     for test in filteredTests {
         let context = Context(sender: test.when.sender)
         for given in test.given {
             context.given(given)
         }
-        let result = try await context.when(test.when)
+        let result: Result<QuarkBuilder.QuarkBuilderBase.BuilderResult, QuarkBuilder.RevertReason>
+        do {
+            result = try await context.when(test.when)
+        } catch let queryError as EVM.QueryError {
+            result = .failure(QuarkBuilder.RevertReason.unknownRevert("QueryError", String(describing: queryError)))
+        }
+
         switch test.expect {
         case let .revert(revertReason):
-            #expect(result == .failure(revertReason))
+            // TODO: This could still decode the quark operation better
+            #expect(result == .failure(revertReason), "\n\(colorize("Expected Revert:", with: .yellow))\n\t\(colorize(String(describing: revertReason), with: .reset))\n\n\n\(colorize("Quark Builder Result:", with: .yellow))\n\t\(colorize(String(describing: result), with: .reset))\n\n")
         case let .single(expectedCall):
             switch result {
             case let .failure(revertReason):
-                #expect(revertReason == .unknownRevert("Unexpected Revert", "Expected \(expectedCall.description)"))
+                #expect(Bool(false), "\n\(colorize("Expected Result:", with: .yellow))\n\t\(expectedCall.descriptionExt)\n\n\n\(colorize("Quark Builder Result:", with: .yellow))\n\t\(colorize(String(describing: revertReason), with: .red))\n\n")
             case let .success(builderResult):
                 #expect(builderResult.version == "0.4.1") // TODO: Check version?
                 #expect(builderResult.quarkOperations.count == 1) // TODO: Check number of operations?
@@ -465,7 +495,7 @@ class Context {
                 // TODO: Handle multiple quark operations
                 let operation: QuarkBuilder.IQuarkWallet.QuarkOperation = builderResult.quarkOperations[0]
                 let call = Call.tryDecodeCall(scriptAddress: operation.scriptAddress, calldata: operation.scriptCalldata)
-                #expect(call == expectedCall)
+                #expect(expectedCall == call, "\n\(colorize("Expected Result:", with: .yellow))\n\t\(expectedCall.descriptionExt)\n\n\n\(colorize("Quark Builder Result:", with: .yellow))\n\t\(call.descriptionExt)\n\n")
             }
         }
     }
