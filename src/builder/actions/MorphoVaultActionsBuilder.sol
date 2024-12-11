@@ -16,6 +16,7 @@ import {TokenWrapper} from "src/builder/TokenWrapper.sol";
 import {QuarkOperationHelper} from "src/builder/QuarkOperationHelper.sol";
 import {List} from "src/builder/List.sol";
 import {QuarkBuilderBase} from "src/builder/QuarkBuilderBase.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 
 contract MorphoVaultActionsBuilder is QuarkBuilderBase {
     struct MorphoVaultSupplyIntent {
@@ -25,13 +26,17 @@ contract MorphoVaultActionsBuilder is QuarkBuilderBase {
         address sender;
         uint256 chainId;
         bool preferAcross;
+        string paymentAssetSymbol;
     }
 
     function morphoVaultSupply(
         MorphoVaultSupplyIntent memory supplyIntent,
         Accounts.ChainAccounts[] memory chainAccountsList,
-        PaymentInfo.Payment memory payment
+        Quotes.Quote memory quote
     ) external pure returns (BuilderResult memory) {
+        PaymentInfo.Payment memory payment =
+            Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, supplyIntent.paymentAssetSymbol);
+
         // If the action is paid for with tokens, filter out any chain accounts that do not have corresponding payment information
         if (payment.isToken) {
             chainAccountsList = Accounts.findChainAccountsWithPaymentInfo(chainAccountsList, payment);
@@ -107,17 +112,20 @@ contract MorphoVaultActionsBuilder is QuarkBuilderBase {
         uint256 chainId;
         address withdrawer;
         bool preferAcross;
+        string paymentAssetSymbol;
     }
 
     function morphoVaultWithdraw(
         MorphoVaultWithdrawIntent memory withdrawIntent,
         Accounts.ChainAccounts[] memory chainAccountsList,
-        PaymentInfo.Payment memory payment
+        Quotes.Quote memory quote
     ) external pure returns (BuilderResult memory) {
         // XXX confirm that you actually have the amount to withdraw
 
+        PaymentInfo.Payment memory payment =
+            Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, withdrawIntent.paymentAssetSymbol);
+
         bool isMaxWithdraw = withdrawIntent.amount == type(uint256).max;
-        bool useQuotecall = false; // never use Quotecall
 
         uint256 actualWithdrawAmount = withdrawIntent.amount;
         if (isMaxWithdraw) {
@@ -156,7 +164,7 @@ contract MorphoVaultActionsBuilder is QuarkBuilderBase {
                 assetSymbolOuts: assetSymbolOuts,
                 blockTimestamp: withdrawIntent.blockTimestamp,
                 chainId: withdrawIntent.chainId,
-                useQuotecall: useQuotecall,
+                useQuotecall: false,
                 bridgeEnabled: true,
                 autoWrapperEnabled: true,
                 preferAcross: withdrawIntent.preferAcross
