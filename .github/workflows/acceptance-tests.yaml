@@ -78,7 +78,7 @@ jobs:
 
       - name: Run Forge build
         run: |
-          forge --version
+          forge build
         id: build
 
       - name: Generate Contract Scripts
