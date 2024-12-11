@@ -2,11 +2,6 @@
 
 set -eo pipefail
 
-swift_cflags=()
-if [ -n "${DESTINATION_FILE}" ]; then
-    swift_cflags+=("--destination" "${DESTINATION_FILE}")
-fi
-
 script_dir=$(dirname "${BASH_SOURCE[0]}")
 swift_base_dir="$(readlink -f "${script_dir}/..")"
 out_dir="$(readlink -f "${swift_base_dir}/../../out")"
@@ -20,8 +15,7 @@ for contract in "${contracts[@]}"; do
     if [ -d "${contract_path}" ]; then
         for file in "${contract_path}"/*.json; do
             echo "Generating ${contract} from $(basename "${file}")"
-            # Just pass the array as arguments without eval
-            swift run "${swift_cflags[@]}" Geno "${file}" --outDir "${source_out_dir}" &
+            swift run Geno "${file}" --outDir "${source_out_dir}" &
         done
     else
         echo "Contract ${contract} not found at ${contract_path}"
