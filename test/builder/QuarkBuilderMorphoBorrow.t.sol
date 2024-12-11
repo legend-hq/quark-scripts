@@ -130,7 +130,9 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.morphoBorrow(
-            borrowIntent_(1, "USDC", 1e6, "WBTC", 1e8, "USD"), chainAccountsFromChainPortfolios(chainPortfolios), quote_()
+            borrowIntent_(1, "USDC", 1e6, "WBTC", 1e8, "USD"),
+            chainAccountsFromChainPortfolios(chainPortfolios),
+            quote_()
         );
         address MorphoActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoActions).creationCode);
         // Check the quark operations
