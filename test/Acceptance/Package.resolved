@@ -1,5 +1,5 @@
 {
-  "originHash" : "f14e1aaa46a66b59f79dc33e1545892e61c2df1e20ebc2544a4acfe2f1157d2d",
+  "originHash" : "96112f37e9a790f65702d93254cdda6bedfb01c8acc0a3a1270f01dc2eeff67a",
   "pins" : [
     {
       "identity" : "bigint",
@@ -15,7 +15,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/hayesgm/Eth.swift",
       "state" : {
-        "revision" : "f4410d13e3bcffbaed550a516c6e59bc8a3cc1d8"
+        "revision" : "88a9f560e678fd480f85a38aaee0bef2d1f7e403"
       }
     },
     {
@@ -30,10 +30,9 @@
     {
       "identity" : "swiftkeccak",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/bitflying/SwiftKeccak.git",
+      "location" : "https://github.com/hayesgm/SwiftKeccak.git",
       "state" : {
-        "revision" : "5fc323d4b08a8c77cbb690505445b32a3b5a8aff",
-        "version" : "0.1.2"
+        "revision" : "98a9d4a037dd62283977d5e0ef7d11c5612ff813"
       }
     }
   ],

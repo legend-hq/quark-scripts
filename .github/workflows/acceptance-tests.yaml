@@ -39,9 +39,7 @@ jobs:
 
       - name: Run Swift Build
         run: |
-          # Note: bypassing issue with `memset_s` being in tiny-keccak
-          # but not available on Ubuntu
-          swift build  --destination destination-ubuntu.json
+          swift build
         id: swift-build
         working-directory: test/Acceptance
 
@@ -85,12 +83,10 @@ jobs:
         run: Scripts/generate-contract-scripts.sh
         id: generate-contract-scripts
         working-directory: test/Acceptance
-        env:
-          DESTINATION_FILE: destination-ubuntu.json
 
       - name: Run Acceptance Tests
         run: |
-          swift test --destination destination-ubuntu.json --xunit-output results.xml
+          swift test --xunit-output results.xml
         id: test
         working-directory: test/Acceptance
 
