@@ -17,6 +17,7 @@ import {Strings} from "src/builder/Strings.sol";
 import {Multicall} from "src/Multicall.sol";
 import {QuotePay} from "src/QuotePay.sol";
 import {WrapperActions} from "src/WrapperScripts.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 
 contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
     function borrowIntent_(
@@ -24,7 +25,8 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         string memory assetSymbol,
         uint256 chainId,
         uint256[] memory collateralAmounts,
-        string[] memory collateralAssetSymbols
+        string[] memory collateralAssetSymbols,
+        string memory paymentAssetSymbol
     ) internal pure returns (CometActionsBuilder.CometBorrowIntent memory) {
         return CometActionsBuilder.CometBorrowIntent({
             amount: amount,
@@ -35,7 +37,8 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
             collateralAmounts: collateralAmounts,
             collateralAssetSymbols: collateralAssetSymbols,
             comet: cometUsdc_(1),
-            preferAcross: false
+            preferAcross: false,
+            paymentAssetSymbol: paymentAssetSymbol
         });
     }
 
@@ -52,9 +55,9 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         vm.expectRevert(QuarkBuilderBase.InvalidInput.selector);
 
         builder.cometBorrow(
-            borrowIntent_(1e6, "USDC", 1, collateralAmounts, collateralAssetSymbols),
+            borrowIntent_(1e6, "USDC", 1, collateralAmounts, collateralAssetSymbols, "USD"),
             chainAccountsList_(3e6),
-            paymentUsd_()
+            quote_()
         );
     }
 
@@ -70,9 +73,9 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "LINK", 1e18, 0));
 
         builder.cometBorrow(
-            borrowIntent_(1e6, "USDC", 1, collateralAmounts, collateralAssetSymbols),
+            borrowIntent_(1e6, "USDC", 1, collateralAmounts, collateralAssetSymbols, "USD"),
             chainAccountsList_(3e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
     }
 
@@ -112,13 +115,14 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
                 "USDC",
                 1,
                 collateralAmounts, // [1e18]
-                collateralAssetSymbols // [LINK]
+                collateralAssetSymbols, // [LINK]
+                "USD"
             ),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -239,13 +243,14 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
                 "USDC",
                 1,
                 collateralAmounts, // [10e18]
-                collateralAssetSymbols // [WETH]
+                collateralAssetSymbols, // [WETH]
+                "USD"
             ),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address wrapperActionsAddress = CodeJarHelper.getCodeAddress(type(WrapperActions).creationCode);
@@ -319,9 +324,11 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
     function testCometBorrowWithQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
 
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 1e6}); // max cost on base is 1 USDC
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 1e8});
 
         string[] memory collateralAssetSymbols = new string[](1);
         collateralAssetSymbols[0] = "LINK";
@@ -358,17 +365,18 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
                 "USDT",
                 8453,
                 collateralAmounts, // [1e18]
-                collateralAssetSymbols // [LINK]
+                collateralAssetSymbols, // [LINK]
+                "USDC"
             ),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address cometSupplyMultipleAssetsAndBorrowAddress =
             CodeJarHelper.getCodeAddress(type(CometSupplyMultipleAssetsAndBorrow).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         // First operation
@@ -496,9 +504,10 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
     // DONE
     function testBorrowPayFromBorrow() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 1.5e6}); // action costs 1.5 USDC
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.5e6}); // action costs 0.5 USDC
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 1.5e8});
 
         uint256[] memory collateralAmounts = new uint256[](1);
         collateralAmounts[0] = 1e18;
@@ -534,10 +543,11 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
                 "USDC",
                 1,
                 collateralAmounts, // [1e18]
-                collateralAssetSymbols // [LINK]
+                collateralAssetSymbols, // [LINK]
+                "USDC"
             ),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts) // user is paying with borrowed USDC
+            quote_(networkOperationFees) // user is paying with borrowed USDC
         );
 
         address cometSupplyMultipleAssetsAndBorrowAddress =
@@ -545,7 +555,7 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         address[] memory collateralTokens = new address[](1);
         collateralTokens[0] = link_(1);
@@ -627,9 +637,11 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
     function testBorrowWithBridgedCollateralAsset() public {
         QuarkBuilder builder = new QuarkBuilder();
 
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.2e6});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 0.2e8});
 
         string[] memory collateralAssetSymbols = new string[](1);
         collateralAssetSymbols[0] = "USDC"; // supplying 2 USDC as collateral
@@ -666,10 +678,11 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
                 "WETH", // borrowing WETH
                 8453,
                 collateralAmounts, // [2e6]
-                collateralAssetSymbols // [USDC]
+                collateralAssetSymbols, // [USDC]
+                "USDC"
             ),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);
@@ -678,7 +691,7 @@ contract QuarkBuilderCometBorrowTest is Test, QuarkBuilderTest {
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         // first operation
