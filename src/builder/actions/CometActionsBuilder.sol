@@ -127,18 +127,20 @@ contract CometActionsBuilder is QuarkBuilderBase {
         string[] collateralAssetSymbols;
         address comet;
         bool preferAcross;
+        string paymentAssetSymbol;
     }
 
     function cometBorrow(
         CometBorrowIntent memory borrowIntent,
         Accounts.ChainAccounts[] memory chainAccountsList,
-        PaymentInfo.Payment memory payment
+        Quotes.Quote memory quote
     ) external pure returns (BuilderResult memory /* builderResult */ ) {
+        PaymentInfo.Payment memory payment =
+            Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, borrowIntent.paymentAssetSymbol);
+
         if (borrowIntent.collateralAmounts.length != borrowIntent.collateralAssetSymbols.length) {
             revert InvalidInput();
         }
-
-        bool useQuotecall = false; // never use Quotecall
 
         (IQuarkWallet.QuarkOperation memory borrowQuarkOperation, Actions.Action memory borrowAction) = Actions
             .cometBorrow(
@@ -171,7 +173,7 @@ contract CometActionsBuilder is QuarkBuilderBase {
                 assetSymbolOuts: borrowIntent.collateralAssetSymbols,
                 blockTimestamp: borrowIntent.blockTimestamp,
                 chainId: borrowIntent.chainId,
-                useQuotecall: useQuotecall,
+                useQuotecall: false,
                 bridgeEnabled: true,
                 autoWrapperEnabled: true,
                 preferAcross: borrowIntent.preferAcross
