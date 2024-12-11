@@ -85,9 +85,6 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
 
     function testCometRepayNotEnoughPaymentToken() public {
         QuarkBuilder builder = new QuarkBuilder();
-        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
-        networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.5e8});
 
         uint256[] memory collateralAmounts = new uint256[](0);
         string[] memory collateralAssetSymbols = new string[](0);
@@ -126,7 +123,7 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
             account: address(0xa11ce),
             nonceSecret: bytes32(uint256(12)),
             assetSymbols: Arrays.stringArray("USDC", "USDT", "LINK", "WETH"),
-            assetBalances: Arrays.uintArray(2e6, 0, 0, 0), // has 1 USDC
+            assetBalances: Arrays.uintArray(2e6, 0, 0, 0), // has 2 USDC
             cometPortfolios: emptyCometPortfolios_(),
             morphoPortfolios: emptyMorphoPortfolios_(),
             morphoVaultPortfolios: emptyMorphoVaultPortfolios_()
