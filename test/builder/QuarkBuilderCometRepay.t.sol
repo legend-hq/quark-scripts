@@ -17,6 +17,7 @@ import {Paycall} from "src/Paycall.sol";
 import {Strings} from "src/builder/Strings.sol";
 import {WrapperActions} from "src/WrapperScripts.sol";
 import {QuotePay} from "src/QuotePay.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 
 contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
     function repayIntent_(
@@ -36,8 +37,17 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
             collateralAssetSymbols: collateralAssetSymbols,
             comet: comet,
             repayer: address(0xa11ce),
-            preferAcross: false
+            preferAcross: false,
+            paymentAssetSymbol: "USDC"
         });
+    }
+
+    function setRepayPaymentAsset_(
+        string memory paymentAssetSymbol,
+        CometActionsBuilder.CometRepayIntent memory repayIntent
+    ) internal pure returns (CometActionsBuilder.CometRepayIntent memory) {
+        repayIntent.paymentAssetSymbol = paymentAssetSymbol;
+        return repayIntent;
     }
 
     function testCometRepayInvalidInput() public {
@@ -55,7 +65,7 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
         builder.cometRepay(
             repayIntent_(1, cometUsdc_(1), "USDC", 1e6, collateralAssetSymbols, collateralAmounts),
             chainAccountsList_(3e6),
-            paymentUsd_()
+            quote_()
         );
     }
 
@@ -69,14 +79,12 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
         builder.cometRepay(
             repayIntent_(1, cometUsdc_(1), "USDC", 1e6, collateralAssetSymbols, collateralAmounts), // attempting to repay 1 USDC
             chainAccountsList_(0e6), // but user has 0 USDC
-            paymentUsd_()
+            quote_()
         );
     }
 
     function testCometRepayNotEnoughPaymentToken() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6}); // action costs 0.5 USDC
 
         uint256[] memory collateralAmounts = new uint256[](0);
         string[] memory collateralAssetSymbols = new string[](0);
@@ -94,11 +102,11 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
         });
 
         // Need 0.5e6 USDC to pay the quote but Alice only has 0.4e6 USDC
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "USDC"));
         builder.cometRepay(
             repayIntent_(1, cometWeth_(1), "WETH", 1e18, collateralAssetSymbols, collateralAmounts),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts)
+            quote_()
         );
     }
 
@@ -115,7 +123,7 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
             account: address(0xa11ce),
             nonceSecret: bytes32(uint256(12)),
             assetSymbols: Arrays.stringArray("USDC", "USDT", "LINK", "WETH"),
-            assetBalances: Arrays.uintArray(1e6, 0, 0, 0), // has 1 USDC
+            assetBalances: Arrays.uintArray(2e6, 0, 0, 0), // has 2 USDC
             cometPortfolios: emptyCometPortfolios_(),
             morphoPortfolios: emptyMorphoPortfolios_(),
             morphoVaultPortfolios: emptyMorphoVaultPortfolios_()
@@ -133,19 +141,22 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.cometRepay(
-            repayIntent_(
-                1,
-                cometUsdc_(1),
-                "USDC",
-                1e6, // repaying 1 USDC
-                collateralAssetSymbols,
-                collateralAmounts // withdrawing 1 LINK
+            setRepayPaymentAsset_(
+                "USD",
+                repayIntent_(
+                    1,
+                    cometUsdc_(1),
+                    "USDC",
+                    1e6, // repaying 1 USDC
+                    collateralAssetSymbols,
+                    collateralAmounts // withdrawing 1 LINK
+                )
             ),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -261,19 +272,22 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.cometRepay(
-            repayIntent_(
-                1,
-                cometWeth_(1),
-                "WETH",
-                1e18, // repaying 1 WETH
-                collateralAssetSymbols,
-                collateralAmounts // withdrawing 1 LINK
+            setRepayPaymentAsset_(
+                "USD",
+                repayIntent_(
+                    1,
+                    cometWeth_(1),
+                    "WETH",
+                    1e18, // repaying 1 WETH
+                    collateralAssetSymbols,
+                    collateralAmounts // withdrawing 1 LINK
+                )
             ),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address wrapperActionsAddress = CodeJarHelper.getCodeAddress(type(WrapperActions).creationCode);
@@ -348,8 +362,11 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
     // pay for a transaction with funds currently supplied as collateral
     function testCometRepayPayFromWithdraw() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6}); // action costs .5 USDC
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.5e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 0.1e8});
 
         ChainPortfolio[] memory chainPortfolios = new ChainPortfolio[](2);
         chainPortfolios[0] = ChainPortfolio({
@@ -394,7 +411,7 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
         QuarkBuilder.BuilderResult memory result = builder.cometRepay(
             repayIntent,
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts) // user is paying with USDC that is currently supplied as collateral
+            quote_(networkOperationFees) // user is paying with USDC that is currently supplied as collateral
         );
 
         address cometRepayAndWithdrawMultipleAssetsAddress =
@@ -402,7 +419,7 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         address[] memory collateralTokens = new address[](1);
         collateralTokens[0] = usdc_(1);
@@ -484,9 +501,11 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
     function testCometRepayWithBridge() public {
         QuarkBuilder builder = new QuarkBuilder();
 
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.2e6});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 0.2e8});
 
         string[] memory collateralAssetSymbols = new string[](1);
         collateralAssetSymbols[0] = "LINK";
@@ -526,7 +545,7 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
                 collateralAmounts
             ),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);
@@ -535,7 +554,7 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         // first operation
@@ -667,8 +686,9 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
     }
 
     function testCometRepayMaxWithQuotePay() public {
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
 
         address[] memory collateralTokens = new address[](0);
         uint256[] memory collateralAmounts = new uint256[](0);
@@ -706,10 +726,10 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
                 collateralAmounts
             ),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         address cometRepayAndWithdrawMultipleAssetsAddress =
             CodeJarHelper.getCodeAddress(type(CometRepayAndWithdrawMultipleAssets).creationCode);
@@ -805,9 +825,11 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
     }
 
     function testCometRepayMaxWithBridge() public {
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 0.1e6});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 0.1e8});
 
         address[] memory collateralTokens = new address[](0);
         uint256[] memory collateralAmounts = new uint256[](0);
@@ -856,10 +878,10 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
                 collateralAmounts
             ),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);
         address cometRepayAndWithdrawMultipleAssetsAddress =
