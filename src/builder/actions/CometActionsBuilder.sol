@@ -281,16 +281,19 @@ contract CometActionsBuilder is QuarkBuilderBase {
         address comet;
         address withdrawer;
         bool preferAcross;
+        string paymentAssetSymbol;
     }
 
     function cometWithdraw(
         CometWithdrawIntent memory cometWithdrawIntent,
         Accounts.ChainAccounts[] memory chainAccountsList,
-        PaymentInfo.Payment memory payment
+        Quotes.Quote memory quote
     ) external pure returns (BuilderResult memory) {
         // XXX confirm that you actually have the amount to withdraw
         bool isMaxWithdraw = cometWithdrawIntent.amount == type(uint256).max;
-        bool useQuotecall = false; // never use Quotecall
+
+        PaymentInfo.Payment memory payment =
+            Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, cometWithdrawIntent.paymentAssetSymbol);
 
         uint256 actualWithdrawAmount = cometWithdrawIntent.amount;
         if (isMaxWithdraw) {
@@ -336,7 +339,7 @@ contract CometActionsBuilder is QuarkBuilderBase {
                     assetSymbolOuts: assetSymbolOuts,
                     blockTimestamp: cometWithdrawIntent.blockTimestamp,
                     chainId: cometWithdrawIntent.chainId,
-                    useQuotecall: useQuotecall,
+                    useQuotecall: false,
                     bridgeEnabled: true,
                     autoWrapperEnabled: true,
                     preferAcross: cometWithdrawIntent.preferAcross

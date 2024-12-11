@@ -13,28 +13,15 @@ import {CodeJarHelper} from "src/builder/CodeJarHelper.sol";
 import {CometWithdrawActions, TransferActions} from "src/DeFiScripts.sol";
 import {Multicall} from "src/Multicall.sol";
 import {QuotePay} from "src/QuotePay.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 
 contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
-    function cometWithdraw_(uint256 chainId, address comet, string memory assetSymbol, uint256 amount)
-        internal
-        pure
-        returns (CometActionsBuilder.CometWithdrawIntent memory)
-    {
-        return cometWithdraw_({
-            chainId: chainId,
-            comet: comet,
-            assetSymbol: assetSymbol,
-            amount: amount,
-            withdrawer: address(0xa11ce)
-        });
-    }
-
     function cometWithdraw_(
         uint256 chainId,
         address comet,
         string memory assetSymbol,
         uint256 amount,
-        address withdrawer
+        string memory paymentAssetSymbol
     ) internal pure returns (CometActionsBuilder.CometWithdrawIntent memory) {
         return CometActionsBuilder.CometWithdrawIntent({
             amount: amount,
@@ -42,8 +29,9 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
             blockTimestamp: BLOCK_TIMESTAMP,
             chainId: chainId,
             comet: comet,
-            withdrawer: withdrawer,
-            preferAcross: false
+            withdrawer: address(0xa11ce),
+            preferAcross: false,
+            paymentAssetSymbol: paymentAssetSymbol
         });
     }
 
@@ -52,12 +40,12 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
     function testCometWithdraw() public {
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.cometWithdraw(
-            cometWithdraw_(1, cometUsdc_(1), "LINK", 1e18),
+            cometWithdraw_(1, cometUsdc_(1), "LINK", 1e18, "USD"),
             chainAccountsList_(2e6), // holding 2 USDC in total across 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -123,19 +111,22 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
 
     function testCometWithdrawWithQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
+
         QuarkBuilder.BuilderResult memory result = builder.cometWithdraw(
-            cometWithdraw_(1, cometUsdc_(1), "LINK", 1e18),
+            cometWithdraw_(1, cometUsdc_(1), "LINK", 1e18, "USDC"),
             chainAccountsList_(3e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address cometWithdrawActionsAddress = CodeJarHelper.getCodeAddress(type(CometWithdrawActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -208,19 +199,22 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
 
     function testCometWithdrawPayFromWithdraw() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6}); // action costs .5 USDC
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: .5e8});
+
         QuarkBuilder.BuilderResult memory result = builder.cometWithdraw(
-            cometWithdraw_(1, cometUsdc_(1), "USDC", 1e6), // user will be withdrawing 1 USDC
+            cometWithdraw_(1, cometUsdc_(1), "USDC", 1e6, "USDC"), // user will be withdrawing 1 USDC
             chainAccountsList_(0), // and has no additional USDC balance
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address cometWithdrawActionsAddress = CodeJarHelper.getCodeAddress(type(CometWithdrawActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -277,8 +271,9 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
     }
 
     function testCometWithdrawMax() public {
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: .1e8});
 
         CometPortfolio[] memory cometPortfolios = new CometPortfolio[](1);
         cometPortfolios[0] = CometPortfolio({
@@ -303,16 +298,16 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.cometWithdraw(
-            cometWithdraw_(1, cometUsdc_(1), "USDC", type(uint256).max),
+            cometWithdraw_(1, cometUsdc_(1), "USDC", type(uint256).max, "USDC"),
             chainAccountsFromChainPortfolios(chainPortfolios), // user has no assets
-            paymentUsdc_(maxCosts) // but will pay from withdrawn funds
+            quote_(networkOperationFees)
         );
 
         address cometWithdrawActionsAddress = CodeJarHelper.getCodeAddress(type(CometWithdrawActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -370,8 +365,9 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
     }
 
     function testCometWithdrawMaxRevertsMaxCostTooHigh() public {
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 100e6}); // max cost is very high
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 100e8}); // operation cost is very high
 
         CometPortfolio[] memory cometPortfolios = new CometPortfolio[](1);
         cometPortfolios[0] = CometPortfolio({
@@ -396,26 +392,30 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "USDC"));
         builder.cometWithdraw(
-            cometWithdraw_(1, cometUsdc_(1), "USDC", type(uint256).max),
+            cometWithdraw_(1, cometUsdc_(1), "USDC", type(uint256).max, "USDC"),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts) // user will pay for transaction with withdrawn funds, but it is not enough
+            quote_(networkOperationFees) // user will pay for transaction with withdrawn funds, but it is not enough
         );
     }
 
     function testCometWithdrawCostTooHigh() public {
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](3);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 5e6});
-        maxCosts[2] = PaymentInfo.PaymentMaxCost({chainId: 7777, amount: 5e6});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](3);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 5e8});
+        networkOperationFees[2] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 7777, price: 5e8});
+
         QuarkBuilder builder = new QuarkBuilder();
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "USDC"));
         builder.cometWithdraw(
-            cometWithdraw_(1, cometUsdc_(1), "USDC", 1e6),
+            cometWithdraw_(1, cometUsdc_(1), "USDC", 1e6, "USDC"),
             chainAccountsList_(0e6),
-            paymentUsdc_(maxCosts) // user will pay for transaction with withdrawn funds, but it is not enough
+            quote_(networkOperationFees) // user will pay for transaction with withdrawn funds, but it is not enough
         );
     }
 }
