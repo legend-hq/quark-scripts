@@ -29,15 +29,24 @@ contract CometActionsBuilder is QuarkBuilderBase {
         address comet;
         address repayer;
         bool preferAcross;
+        string paymentAssetSymbol;
     }
 
     function cometRepay(
         CometRepayIntent memory repayIntent,
         Accounts.ChainAccounts[] memory chainAccountsList,
-        PaymentInfo.Payment memory payment
+        Quotes.Quote memory quote
     ) external pure returns (BuilderResult memory /* builderResult */ ) {
         if (repayIntent.collateralAmounts.length != repayIntent.collateralAssetSymbols.length) {
             revert InvalidInput();
+        }
+
+        PaymentInfo.Payment memory payment =
+            Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, repayIntent.paymentAssetSymbol);
+
+        // If the action is paid for with tokens, filter out any chain accounts that do not have corresponding payment information
+        if (payment.isToken) {
+            chainAccountsList = Accounts.findChainAccountsWithPaymentInfo(chainAccountsList, payment);
         }
 
         // XXX confirm that the user is not withdrawing beyond their limits
