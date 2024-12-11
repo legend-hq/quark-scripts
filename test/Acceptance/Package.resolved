@@ -1,0 +1,41 @@
+{
+  "originHash" : "f14e1aaa46a66b59f79dc33e1545892e61c2df1e20ebc2544a4acfe2f1157d2d",
+  "pins" : [
+    {
+      "identity" : "bigint",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/attaswift/BigInt.git",
+      "state" : {
+        "revision" : "0ed110f7555c34ff468e72e1686e59721f2b0da6",
+        "version" : "5.3.0"
+      }
+    },
+    {
+      "identity" : "eth.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/hayesgm/Eth.swift",
+      "state" : {
+        "revision" : "f4410d13e3bcffbaed550a516c6e59bc8a3cc1d8"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-syntax.git",
+      "state" : {
+        "revision" : "2bc86522d115234d1f588efe2bcb4ce4be8f8b82",
+        "version" : "510.0.3"
+      }
+    },
+    {
+      "identity" : "swiftkeccak",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/bitflying/SwiftKeccak.git",
+      "state" : {
+        "revision" : "5fc323d4b08a8c77cbb690505445b32a3b5a8aff",
+        "version" : "0.1.2"
+      }
+    }
+  ],
+  "version" : 3
+}
