@@ -18,6 +18,7 @@ import {WrapperActions} from "src/WrapperScripts.sol";
 import {MorphoInfo} from "src/builder/MorphoInfo.sol";
 import {TokenWrapper} from "src/builder/TokenWrapper.sol";
 import {QuotePay} from "src/QuotePay.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 
 contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
     function borrowIntent_(
@@ -25,7 +26,8 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         string memory assetSymbol,
         uint256 amount,
         string memory collateralAssetSymbol,
-        uint256 collateralAmount
+        uint256 collateralAmount,
+        string memory paymentAssetSymbol
     ) internal pure returns (MorphoActionsBuilder.MorphoBorrowIntent memory) {
         return borrowIntent_({
             chainId: chainId,
@@ -33,7 +35,8 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
             amount: amount,
             collateralAssetSymbol: collateralAssetSymbol,
             collateralAmount: collateralAmount,
-            borrower: address(0xa11ce)
+            borrower: address(0xa11ce),
+            paymentAssetSymbol: paymentAssetSymbol
         });
     }
 
@@ -43,7 +46,8 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         uint256 amount,
         string memory collateralAssetSymbol,
         uint256 collateralAmount,
-        address borrower
+        address borrower,
+        string memory paymentAssetSymbol
     ) internal pure returns (MorphoActionsBuilder.MorphoBorrowIntent memory) {
         return MorphoActionsBuilder.MorphoBorrowIntent({
             amount: amount,
@@ -53,7 +57,8 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
             chainId: chainId,
             collateralAmount: collateralAmount,
             collateralAssetSymbol: collateralAssetSymbol,
-            preferAcross: false
+            preferAcross: false,
+            paymentAssetSymbol: paymentAssetSymbol
         });
     }
 
@@ -84,9 +89,9 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         // Pair not exist in known Morpho markets
         vm.expectRevert(MorphoInfo.MorphoMarketNotFound.selector);
         builder.morphoBorrow(
-            borrowIntent_(1, "USDC", 1e6, "WETH", 1e18),
+            borrowIntent_(1, "USDC", 1e6, "WETH", 1e18, "USD"),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsd_()
+            quote_()
         );
     }
 
@@ -94,9 +99,9 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "WBTC", 1e8, 0));
         builder.morphoBorrow(
-            borrowIntent_(1, "USDC", 1e6, "WBTC", 1e8),
+            borrowIntent_(1, "USDC", 1e6, "WBTC", 1e8, "USD"),
             chainAccountsList_(3e6), // holding 3 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
     }
 
@@ -125,11 +130,13 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.morphoBorrow(
-            borrowIntent_(1, "USDC", 1e6, "WBTC", 1e8), chainAccountsFromChainPortfolios(chainPortfolios), paymentUsd_()
+            borrowIntent_(1, "USDC", 1e6, "WBTC", 1e8, "USD"),
+            chainAccountsFromChainPortfolios(chainPortfolios),
+            quote_()
         );
         address MorphoActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoActions).creationCode);
         // Check the quark operations
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
         assertEq(result.quarkOperations.length, 1, "one operation");
         assertEq(
             result.quarkOperations[0].scriptAddress,
@@ -210,12 +217,12 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.morphoBorrow(
-            borrowIntent_(8453, "USDC", 1e6, "WETH", 1e18),
+            borrowIntent_(8453, "USDC", 1e6, "WETH", 1e18, "USD"),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address wrapperActionsAddress = CodeJarHelper.getCodeAddress(type(WrapperActions).creationCode);
@@ -310,21 +317,22 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
             morphoVaultPortfolios: emptyMorphoVaultPortfolios_()
         });
 
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
 
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.morphoBorrow(
-            borrowIntent_(1, "USDC", 1e6, "WBTC", 1e8),
+            borrowIntent_(1, "USDC", 1e6, "WBTC", 1e8, "USDC"),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address morphoActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -429,21 +437,22 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
             morphoVaultPortfolios: emptyMorphoVaultPortfolios_()
         });
 
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.1e6});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
 
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.morphoBorrow(
-            borrowIntent_(1, "USDC", 1e6, "WBTC", 1e8),
+            borrowIntent_(1, "USDC", 1e6, "WBTC", 1e8, "USDC"),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address morphoActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -512,8 +521,9 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
 
     function testMorphoBorrowMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 0.5e6}); // action costs .5 USDC
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.5e8}); // action costs .5 USDC
 
         ChainPortfolio[] memory chainPortfolios = new ChainPortfolio[](1);
         chainPortfolios[0] = ChainPortfolio({
@@ -527,11 +537,11 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
             morphoVaultPortfolios: emptyMorphoVaultPortfolios_()
         });
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "USDC"));
         builder.morphoBorrow(
-            borrowIntent_(1, "WETH", 1e18, "WBTC", 0),
+            borrowIntent_(1, "WETH", 1e18, "WBTC", 0, "USDC"),
             chainAccountsFromChainPortfolios(chainPortfolios),
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
     }
 }
