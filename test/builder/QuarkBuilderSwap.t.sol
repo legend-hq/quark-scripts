@@ -18,6 +18,7 @@ import {Multicall} from "src/Multicall.sol";
 import {WrapperActions} from "src/WrapperScripts.sol";
 import {PaymentInfo} from "src/builder/PaymentInfo.sol";
 import {QuotePay} from "src/QuotePay.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 
 contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
     address constant ZERO_EX_ENTRY_POINT = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
@@ -29,7 +30,8 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         uint256 sellAmount,
         uint256 buyAmount,
         address sender,
-        uint256 blockTimestamp
+        uint256 blockTimestamp,
+        string memory paymentAssetSymbol
     ) internal pure returns (SwapActionsBuilder.ZeroExSwapIntent memory) {
         address usdc = usdc_(chainId);
         return zeroExSwap_(
@@ -41,7 +43,8 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
             usdc,
             buyAmount,
             sender,
-            blockTimestamp
+            blockTimestamp,
+            paymentAssetSymbol
         );
     }
 
@@ -51,7 +54,8 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         uint256 sellAmount,
         uint256 buyAmount,
         address sender,
-        uint256 blockTimestamp
+        uint256 blockTimestamp,
+        string memory paymentAssetSymbol
     ) internal pure returns (SwapActionsBuilder.ZeroExSwapIntent memory) {
         address weth = weth_(chainId);
         return zeroExSwap_(
@@ -63,7 +67,8 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
             weth,
             buyAmount,
             sender,
-            blockTimestamp
+            blockTimestamp,
+            paymentAssetSymbol
         );
     }
 
@@ -76,7 +81,8 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         address buyToken,
         uint256 buyAmount,
         address sender,
-        uint256 blockTimestamp
+        uint256 blockTimestamp,
+        string memory paymentAssetSymbol
     ) internal pure returns (SwapActionsBuilder.ZeroExSwapIntent memory) {
         return SwapActionsBuilder.ZeroExSwapIntent({
             chainId: chainId,
@@ -91,7 +97,8 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
             sender: sender,
             isExactOut: false,
             blockTimestamp: blockTimestamp,
-            preferAcross: false
+            preferAcross: false,
+            paymentAssetSymbol: paymentAssetSymbol
         });
     }
 
@@ -99,19 +106,24 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 3000e6, 0e6));
         builder.swap(
-            buyWeth_(1, usdc_(1), 3000e6, 1e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 3000 USDC on chain 1 to 1 WETH
+            buyWeth_(1, usdc_(1), 3000e6, 1e18, address(0xa11ce), BLOCK_TIMESTAMP, "USD"), // swap 3000 USDC on chain 1 to 1 WETH
             chainAccountsList_(0e6), // but we are holding 0 USDC in total across 1, 8453
-            paymentUsd_()
+            quote_()
         );
     }
 
     function testSwapMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "USDC"));
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 1000e8});
+
         builder.swap(
-            buyWeth_(1, usdc_(1), 30e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 30 USDC on chain 1 to 0.01 WETH
+            buyWeth_(1, usdc_(1), 30e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP, "USDC"), // swap 30 USDC on chain 1 to 0.01 WETH
             chainAccountsList_(60e6), // holding 60 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts_(1, 1_000e6)) // but costs 1,000 USDC
+            quote_(networkOperationFees) // but operations costs 1,000 USDC
         );
     }
 
@@ -121,20 +133,24 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 30e6, 0e6));
         builder.swap(
             // there is no bridge to chain 7777, so we cannot get to our funds
-            buyWeth_(7777, usdc_(7777), 30e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 30 USDC on chain 1 to 0.01 WETH
+            buyWeth_(7777, usdc_(7777), 30e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP, "USD"), // swap 30 USDC on chain 1 to 0.01 WETH
             chainAccountsList_(60e6), // holding 60 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
     }
 
     function testSwapFundsUnavailableErrorGivesSuggestionForAvailableFunds() public {
         QuarkBuilder builder = new QuarkBuilder();
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 3e8});
+
         // The 30e6 is the suggested amount (total available funds) to swap
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 35e6, 30e6));
         builder.swap(
-            buyWeth_(1, usdc_(1), 35e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 30 USDC on chain 1 to 0.01 WETH
+            buyWeth_(1, usdc_(1), 35e6, 0.01e18, address(0xa11ce), BLOCK_TIMESTAMP, "USDC"), // swap 30 USDC on chain 1 to 0.01 WETH
             chainAccountsList_(60e6), // holding 60 USDC in total across 1, 8453
-            paymentUsdc_(maxCosts_(1, 3e6)) // but costs 3 USDC
+            quote_(networkOperationFees) // but operations cost 3 USDC
         );
     }
 
@@ -142,12 +158,12 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
     function testLocalSwapSucceeds() public {
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.swap(
-            buyWeth_(1, usdc_(1), 3000e6, 1e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 3000 USDC on chain 1 to 1 WETH
+            buyWeth_(1, usdc_(1), 3000e6, 1e18, address(0xa11ce), BLOCK_TIMESTAMP, "USD"), // swap 3000 USDC on chain 1 to 1 WETH
             chainAccountsList_(6000e6), // holding 6000 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -255,12 +271,12 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
             morphoVaultPositions: emptyMorphoVaultPositions_()
         });
         QuarkBuilder.BuilderResult memory result = builder.swap(
-            buyUsdc_(1, weth_(1), 1e18, 3000e6, address(0xa11ce), BLOCK_TIMESTAMP), // swap 1 ETH on chain 1 to 3000 USDC
+            buyUsdc_(1, weth_(1), 1e18, 3000e6, address(0xa11ce), BLOCK_TIMESTAMP, "USD"), // swap 1 ETH on chain 1 to 3000 USDC
             chainAccountsList, // holding 1ETH in total in chains 1
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address wrapperActionsAddress = CodeJarHelper.getCodeAddress(type(WrapperActions).creationCode);
@@ -330,19 +346,21 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
 
     function testLocalSwapWithQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e6});
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
+
         QuarkBuilder.BuilderResult memory result = builder.swap(
-            buyWeth_(1, usdc_(1), 3000e6, 1e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap 3000 USDC on chain 1 to 1 WETH
+            buyWeth_(1, usdc_(1), 3000e6, 1e18, address(0xa11ce), BLOCK_TIMESTAMP, "USDC"), // swap 3000 USDC on chain 1 to 1 WETH
             chainAccountsList_(6010e6), // holding 6010 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address approveAndSwapAddress = CodeJarHelper.getCodeAddress(type(ApproveAndSwap).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -424,8 +442,10 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
 
     function testSwapMaxSucceeds() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e6});
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
+
         Accounts.ChainAccounts[] memory chainAccountsList = new Accounts.ChainAccounts[](3);
         chainAccountsList[0] = Accounts.ChainAccounts({
             chainId: 1,
@@ -453,16 +473,16 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         });
 
         QuarkBuilder.BuilderResult memory result = builder.swap(
-            buyWeth_(1, usdc_(1), type(uint256).max, 3e18, address(0xa11ce), BLOCK_TIMESTAMP), // swap max on chain 1
+            buyWeth_(1, usdc_(1), type(uint256).max, 3e18, address(0xa11ce), BLOCK_TIMESTAMP, "USDC"), // swap max on chain 1
             chainAccountsList, // holding 9005 USDC in total chains 1
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address approveAndSwapAddress = CodeJarHelper.getCodeAddress(type(ApproveAndSwap).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -530,12 +550,12 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
     function testBridgeSwapSucceeds() public {
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.swap(
-            buyWeth_(8453, usdc_(8453), 3000e6, 1e18, address(0xb0b), BLOCK_TIMESTAMP), // swap 3000 USDC on chain 8453 to 1 WETH
+            buyWeth_(8453, usdc_(8453), 3000e6, 1e18, address(0xb0b), BLOCK_TIMESTAMP, "USD"), // swap 3000 USDC on chain 8453 to 1 WETH
             chainAccountsList_(4000e6), // holding 4000 USDC in total across chains 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 2, "two operations");
@@ -674,14 +694,17 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
 
     function testBridgeSwapWithQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 1e6});
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 1e8});
+
         // Note: There are 2000e6 USDC on each chain, so the Builder should attempt to bridge 1000 USDC to chain 8453
         QuarkBuilder.BuilderResult memory result = builder.swap(
-            buyWeth_(8453, usdc_(8453), 3000e6, 1e18, address(0xb0b), BLOCK_TIMESTAMP), // swap 3000 USDC on chain 8453 to 1 WETH
+            buyWeth_(8453, usdc_(8453), 3000e6, 1e18, address(0xb0b), BLOCK_TIMESTAMP, "USDC"), // swap 3000 USDC on chain 8453 to 1 WETH
             chainAccountsList_(4000e6), // holding 4000 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address approveAndSwapAddress = CodeJarHelper.getCodeAddress(type(ApproveAndSwap).creationCode);
@@ -689,7 +712,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 2, "two operations");
@@ -815,13 +838,16 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
 
     function testBridgeSwapMaxWithQuotePaySucceeds() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](2);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 5e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 1e6});
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 1e8});
+
         QuarkBuilder.BuilderResult memory result = builder.swap(
-            buyWeth_(8453, usdc_(8453), type(uint256).max, 2e18, address(0xb0b), BLOCK_TIMESTAMP), // swap max on chain 8453 to 4 WETH
+            buyWeth_(8453, usdc_(8453), type(uint256).max, 2e18, address(0xb0b), BLOCK_TIMESTAMP, "USDC"), // swap max on chain 8453 to 4 WETH
             chainAccountsList_(6010e6), // holding 6010 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address approveAndSwapAddress = CodeJarHelper.getCodeAddress(type(ApproveAndSwap).creationCode);
@@ -829,7 +855,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 2, "two operations");
@@ -956,8 +982,10 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
 
     function testIgnoresChainIfMaxCostIsNotSpecified() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](1);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 1e6});
+
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 1e8});
 
         // Note: There are 2000e6 USDC on each chain, so the Builder should attempt to bridge 1001 USDC to chain 8453.
         // However, max cost is not specified for chain 1, so the Builder will ignore the chain and revert because
@@ -966,9 +994,9 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         // The `FundsAvailable` error tells us that 3000 USDC was asked to be swap, but only 1999 USDC was available.
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 3000e6, 2000e6));
         builder.swap(
-            buyWeth_(8453, usdc_(8453), 3000e6, 1e18, address(0xc0b), BLOCK_TIMESTAMP), // swap 3000 USDC on chain 8453 to 1 WETH
+            buyWeth_(8453, usdc_(8453), 3000e6, 1e18, address(0xc0b), BLOCK_TIMESTAMP, "USDC"), // swap 3000 USDC on chain 8453 to 1 WETH
             chainAccountsList_(4000e6), // holding 4000 USDC in total across chains 1, 8453
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
     }
 }
