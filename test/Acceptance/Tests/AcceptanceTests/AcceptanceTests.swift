@@ -13,11 +13,12 @@ let allTests: [AcceptanceTest] = [
             .quote(.basic),
         ],
         when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .ethereum),
-        expect: .single(
-            .multicall([
-                .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
-                .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
-            ]))
+        expect: .success(
+            .single(
+                .multicall([
+                    .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
+                    .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
+                ])))
     ),
     .init(
         name: "Alice transfers 10 USDC to Bob on Arbitrum",
@@ -26,11 +27,12 @@ let allTests: [AcceptanceTest] = [
             .quote(.basic),
         ],
         when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .arbitrum),
-        expect: .single(
-            .multicall([
-                .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
-                .quotePay(payment: .amt(0.04, .usdc), payee: .stax, quote: .basic),
-            ]))
+        expect: .success(
+            .single(
+                .multicall([
+                    .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
+                    .quotePay(payment: .amt(0.04, .usdc), payee: .stax, quote: .basic),
+                ])))
     ),
     .init(
         name: "Alice transfers MAX USDC to Bob on Arbitrum",
@@ -71,11 +73,11 @@ let allTests: [AcceptanceTest] = [
             currency: .weth,
             .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(0.5, .weth), on: .ethereum)
         ),
-        expect: .single(
+        expect: .success(.single(
             .multicall([
                 .supplyToComet(tokenAmount: .amt(0.5, .weth), market: .cusdcv3, network: .ethereum),
-                .quotePay(payment: .amt(0.000025000001, .weth), payee: .stax, quote: .basic)
-            ])
+                .quotePay(payment: .amt(0.000025000001, .weth), payee: .stax, quote: .basic),
+            ]))
         )
     ),
     // @skip: Alice cannot supply ETH to comet because Actions.cometSupply doesn't wrap ETH
@@ -89,11 +91,11 @@ let allTests: [AcceptanceTest] = [
             currency: .eth,
             .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(0.5, .eth), on: .ethereum)
         ),
-        expect: .single(
+        expect: .success(.single(
             .multicall([
                 .supplyToComet(tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
-                .quotePay(payment: .amt(0.000025000001, .eth), payee: .stax, quote: .basic)
-            ])
+                .quotePay(payment: .amt(0.000025000001, .eth), payee: .stax, quote: .basic),
+            ]))
         ),
         skip: true
     ),
@@ -104,9 +106,9 @@ let allTests: [AcceptanceTest] = [
             .cometPositions(.cusdcv3, .ethereum, [
                 .supplied(.alice, .amt(0.3, .weth)),
                 .supplied(.alice, .amt(0.1, .weth)),
-                .borrowed(.alice, .amt(100, .usdc))
+                .borrowed(.alice, .amt(100, .usdc)),
             ]),
-            .quote(.basic)
+            .quote(.basic),
         ],
         when: .transfer(from: .alice, to: .bob, amount: .amt(50, .usdc), on: .arbitrum),
         // FIXME: this should not revert! borrowed funds should be added to token balance
@@ -117,7 +119,7 @@ let allTests: [AcceptanceTest] = [
                 toWei(tokenAmount: .amt(0, .usdc))
             )
         )
-    )
+    ),
 ]
 
 let tests = allTests.filter { !$0.skip }
@@ -250,6 +252,16 @@ enum Call: CustomStringConvertible, Equatable {
     }
 }
 
+extension Array where Element == Call {
+    var descriptionExt: String {
+        if count == 1 {
+            return self[0].descriptionExt
+        } else {
+            return "multicall:\n\(map { "\n\t\t- \($0.descriptionExt)" }.joined(separator: "\n"))\n"
+        }
+    }
+}
+
 func getScriptAddress(_ creationCode: Hex) -> EthAddress {
     // Create2 address calculation according to EIP-1014
     // address = keccak256(0xff ++ deployingAddress ++ salt ++ keccak256(bytecode))[12:]
@@ -341,8 +353,8 @@ enum Comet: Hashable, Equatable {
 
     var baseAsset: Token {
         switch self {
-            case .cusdcv3: return .usdc
-            case .unknownComet(_): return .unknownToken("0x0000000000000000000000000000000000000000")
+        case .cusdcv3: return .usdc
+        case .unknownComet: return .unknownToken("0x0000000000000000000000000000000000000000")
         }
     }
 
@@ -502,7 +514,7 @@ enum Token: Hashable, Equatable {
     }
 
     var description: String {
-        return self.symbol
+        return symbol
     }
 
     func address(network: Network) -> EthAddress {
@@ -563,9 +575,14 @@ indirect enum When {
     }
 }
 
+enum CallExpect {
+    case single(Call)
+    case multi([Call])
+}
+
 enum Expect {
     case revert(QuarkBuilder.RevertReason)
-    case single(Call)
+    case success(CallExpect)
 }
 
 final class AcceptanceTest: CustomTestArgumentEncodable, CustomStringConvertible, Sendable {
@@ -734,7 +751,7 @@ class Context {
         QuarkBuilder.QuarkBuilderBase.BuilderResult, QuarkBuilder.RevertReason
     > {
         chainAccounts = chainAccounts.map { chainAccount in
-            return QuarkBuilder.Accounts.ChainAccounts(
+            QuarkBuilder.Accounts.ChainAccounts(
                 chainId: chainAccount.chainId,
                 quarkSecrets: chainAccount.quarkSecrets,
                 assetPositionsList: chainAccount.assetPositionsList,
@@ -772,7 +789,8 @@ class Context {
                         .init(
                             chainId: BigUInt($0.key.chainId),
                             opType: "BASELINE",
-                            price: BigUInt($0.value * 1e8))
+                            price: BigUInt($0.value * 1e8)
+                        )
                     }
                 )
             )
@@ -850,7 +868,7 @@ func reifyCometPositions(_ cometPositionsIsh: [Comet: [Network: [Account: [Token
                     borrowed: borrowed.map { tokenAmount in toWei(tokenAmount: tokenAmount) },
                     supplied: supplied.map { tokenAmount in toWei(tokenAmount: tokenAmount) }
                 ),
-                collateralPositions: balances.reduce([], { positions, pair in
+                collateralPositions: balances.reduce([]) { positions, pair in
                     let (_, tokenAmounts) = pair
                     return positions + [QuarkBuilder.Accounts.CometCollateralPosition(
                         asset: tokenAmounts[0].token.address(network: network),
@@ -859,7 +877,7 @@ func reifyCometPositions(_ cometPositionsIsh: [Comet: [Network: [Account: [Token
                             toWei(tokenAmount: tokenAmount)
                         }
                     )]
-                })
+                }
             ))
         }
     }
@@ -886,6 +904,12 @@ func customFatalError(_ message: String, file: String = #file, line: Int = #line
     fatalError(message)
 }
 
+func buildResultToCalls(builderResult: QuarkBuilder.QuarkBuilderBase.BuilderResult) -> [Call] {
+    return zip(builderResult.quarkOperations, builderResult.actions).map { operation, action in
+        Call.tryDecodeCall(scriptAddress: operation.scriptAddress, calldata: operation.scriptCalldata, network: Network.fromChainId(BigInt(action.chainId)))
+    }
+}
+
 @Test func testCreate2Address() {
     let address = getScriptAddress(Hex("0xaa"))
     #expect(address == EthAddress("0x103B7e61BBaa2F62028Ebf3Ea7C47dC74Bd3a617"))
@@ -904,31 +928,32 @@ func testAcceptanceTests(test: AcceptanceTest) async throws {
         result = .failure(QuarkBuilder.RevertReason.unknownRevert("QueryError", String(describing: queryError)))
     }
 
-    switch test.expect {
-    case let .revert(revertReason):
-        // TODO: This could still decode the quark operation better
-        #expect(result == .failure(revertReason), "\n\(colorize("Expected Revert:", with: .yellow))\n\t\(colorize(String(describing: revertReason), with: .reset))\n\n\n\(colorize("Quark Builder Result:", with: .yellow))\n\t\(colorize(String(describing: result), with: .reset))\n\n")
-    case let .single(expectedCall):
-        switch result {
-        case let .failure(revertReason):
-            #expect(Bool(false), "\n\(colorize("Expected Result:", with: .yellow))\n\t\(expectedCall.descriptionExt)\n\n\n\(colorize("Quark Builder Result:", with: .yellow))\n\t\(colorize(String(describing: revertReason), with: .red))\n\n")
-        case let .success(builderResult):
-            #expect(builderResult.version == "0.4.1") // TODO: Check version?
-            #expect(builderResult.quarkOperations.count == 1) // TODO: Check number of operations?
-            #expect(builderResult.actions.count == 1) // TODO: Check number of actions?
-            // #expect(builderResult.eip712Data.domainSeparator == EIP712Helper.DomainSeparator(name: "Quark", version: "1")) // TODO: Check domain separator?
-            #expect(builderResult.paymentCurrency == context.paymentToken?.symbol ?? "USDC")
-
-            // TODO: Handle multiple quark operations
-            let operation: QuarkBuilder.IQuarkWallet.QuarkOperation =
-                builderResult.quarkOperations[0]
-            let action: QuarkBuilder.Actions.Action = builderResult.actions[0]
-            let call = Call.tryDecodeCall(
-                scriptAddress: operation.scriptAddress,
-                calldata: operation.scriptCalldata,
-                network: Network.fromChainId(BigInt(action.chainId))
-            )
-            #expect(expectedCall == call, "\n\(colorize("Expected Result:", with: .yellow))\n\t\(expectedCall.descriptionExt)\n\n\n\(colorize("Quark Builder Result:", with: .yellow))\n\t\(call.descriptionExt)\n\n")
+    switch (test.expect, result) {
+    case let (.revert(expectedRevertReason), .failure(revertReason)):
+        #expect(revertReason == expectedRevertReason, "\n\(colorize("Expected Revert:", with: .yellow))\n\t\(colorize(String(describing: expectedRevertReason), with: .reset))\n\n\n\(colorize("Quark Builder Result:", with: .yellow))\n\t\(colorize(String(describing: revertReason), with: .reset))\n\n")
+    case let (.revert(expectedRevertReason), .success(builderResult)):
+        let calls = buildResultToCalls(builderResult: builderResult)
+        #expect(Bool(false), "\n\(colorize("Expected Revert:", with: .yellow))\n\t\(colorize(String(describing: expectedRevertReason), with: .reset))\n\n\n\(colorize("Quark Builder Result:", with: .yellow))\n\t\(calls.descriptionExt)\n\n")
+    case let (.success(callExpect), .failure(revertReason)):
+        let expectedCalls = switch callExpect {
+        case let .single(expectedCall):
+            [expectedCall]
+        case let .multi(expectedCalls):
+            expectedCalls
         }
+
+        #expect(Bool(false), "\n\(colorize("Expected Result:", with: .yellow))\n\t\(expectedCalls.descriptionExt)\n\n\n\(colorize("Quark Builder Failure:", with: .yellow))\n\t\(colorize(String(describing: revertReason), with: .red))\n\n")
+    case let (.success(callExpect), .success(builderResult)):
+        // #expect(builderResult.eip712Data.domainSeparator == EIP712Helper.DomainSeparator(name: "Quark", version: "1")) // TODO: Check domain separator?
+        // #expect(builderResult.paymentCurrency == "USDC") // TODO: Check payment currency?
+
+        let calls = buildResultToCalls(builderResult: builderResult)
+        let expectedCalls = switch callExpect {
+        case let .single(expectedCall):
+            [expectedCall]
+        case let .multi(expectedCalls):
+            expectedCalls
+        }
+        #expect(expectedCalls == calls, "\n\(colorize("Expected Result:", with: .yellow))\n\t\(expectedCalls.descriptionExt)\n\n\n\(colorize("Quark Builder Result:", with: .yellow))\n\t\(calls.descriptionExt)\n\n")
     }
 }
