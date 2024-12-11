@@ -12,7 +12,7 @@ legend-scripts> FOUNDRY_PROFILE=ir forge build
 Then in `tests/Acceptance/` run:
 
 ```sh
-legend-scriptstests/Acceptance> swift run Geno ../../out/QuarkBuilder.sol/QuarkBuilder.json --outDir ./Sources/Acceptance/ && swiftformat ./Sources/Acceptance/QuarkBuilder.swift
+legend-scriptstests/Acceptance> ./Scripts/generate-contract-scripts.sh
 ```
 
 ## Running Tests
