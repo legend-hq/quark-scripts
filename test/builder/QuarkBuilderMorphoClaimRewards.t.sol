@@ -18,6 +18,7 @@ import {QuarkBuilder} from "src/builder/QuarkBuilder.sol";
 import {QuarkBuilderBase} from "src/builder/QuarkBuilderBase.sol";
 import {MorphoActionsBuilder} from "src/builder/actions/MorphoActionsBuilder.sol";
 import {QuotePay} from "src/QuotePay.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 
 contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
     // Fixtures of morpho reward data to pass in
@@ -63,7 +64,8 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
         uint256[] memory claimables,
         address[] memory distributors,
         address[] memory rewards,
-        bytes32[][] memory proofs
+        bytes32[][] memory proofs,
+        string memory paymentAssetSymbol
     ) internal pure returns (MorphoActionsBuilder.MorphoRewardsClaimIntent memory) {
         return MorphoActionsBuilder.MorphoRewardsClaimIntent({
             blockTimestamp: BLOCK_TIMESTAMP,
@@ -74,7 +76,8 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
             distributors: distributors,
             rewards: rewards,
             proofs: proofs,
-            preferAcross: false
+            preferAcross: false,
+            paymentAssetSymbol: paymentAssetSymbol
         });
     }
 
@@ -82,13 +85,13 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.morphoClaimRewards(
             morphoClaimRewardsIntent_(
-                1, fixtureAccounts, fixtureClaimables, fixtureDistributors, fixtureRewards, fixtureProofs
+                1, fixtureAccounts, fixtureClaimables, fixtureDistributors, fixtureRewards, fixtureProofs, "USD"
             ),
             chainAccountsList_(2e6), // holding 2 USDC in total across 1, 8453
-            paymentUsd_()
+            quote_()
         );
 
-        assertEq(result.paymentCurrency, "usd", "usd currency");
+        assertEq(result.paymentCurrency, "USD", "usd currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -151,24 +154,26 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
 
     function testMorphoClaimRewardsPayWithReward() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](3);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 1e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 1e6});
-        maxCosts[2] = PaymentInfo.PaymentMaxCost({chainId: 7777, amount: 1e6});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](3);
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 1e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 1e8});
+        networkOperationFees[2] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 7777, price: 1e8});
 
         QuarkBuilder.BuilderResult memory result = builder.morphoClaimRewards(
             morphoClaimRewardsIntent_(
-                1, fixtureAccounts, fixtureClaimables, fixtureDistributors, fixtureRewards, fixtureProofs
+                1, fixtureAccounts, fixtureClaimables, fixtureDistributors, fixtureRewards, fixtureProofs, "USDC"
             ),
             chainAccountsList_(0),
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
 
         address morphoRewardsActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoRewardsActions).creationCode);
         address multicallAddress = CodeJarHelper.getCodeAddress(type(Multicall).creationCode);
         address quotePayAddress = CodeJarHelper.getCodeAddress(type(QuotePay).creationCode);
 
-        assertEq(result.paymentCurrency, "usdc", "usdc currency");
+        assertEq(result.paymentCurrency, "USDC", "usdc currency");
 
         // Check the quark operations
         assertEq(result.quarkOperations.length, 1, "one operation");
@@ -241,18 +246,27 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
 
     function testMorphoClaimRewardsMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
-        PaymentInfo.PaymentMaxCost[] memory maxCosts = new PaymentInfo.PaymentMaxCost[](3);
-        maxCosts[0] = PaymentInfo.PaymentMaxCost({chainId: 1, amount: 100e6});
-        maxCosts[1] = PaymentInfo.PaymentMaxCost({chainId: 8453, amount: 100e6});
-        maxCosts[2] = PaymentInfo.PaymentMaxCost({chainId: 7777, amount: 100e6});
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](3);
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 100e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 100e8});
+        networkOperationFees[2] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 7777, price: 100e8});
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "usdc"));
+        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "USDC"));
         builder.morphoClaimRewards(
             morphoClaimRewardsIntent_(
-                1, fixtureAccounts, fixtureClaimablesLessUSDC, fixtureDistributors, fixtureRewards, fixtureProofs
+                1,
+                fixtureAccounts,
+                fixtureClaimablesLessUSDC,
+                fixtureDistributors,
+                fixtureRewards,
+                fixtureProofs,
+                "USDC"
             ),
             chainAccountsList_(2e6),
-            paymentUsdc_(maxCosts)
+            quote_(networkOperationFees)
         );
     }
 
@@ -261,10 +275,10 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
         vm.expectRevert(QuarkBuilderBase.InvalidInput.selector);
         builder.morphoClaimRewards(
             morphoClaimRewardsIntent_(
-                1, fixtureAccounts, fixtureClaimables, fixtureDistributors, fixtureInvalidRewards, fixtureProofs
+                1, fixtureAccounts, fixtureClaimables, fixtureDistributors, fixtureInvalidRewards, fixtureProofs, "USD"
             ),
             chainAccountsList_(2e6),
-            paymentUsd_()
+            quote_()
         );
     }
 }
