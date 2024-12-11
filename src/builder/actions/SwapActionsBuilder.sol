@@ -16,6 +16,7 @@ import {TokenWrapper} from "src/builder/TokenWrapper.sol";
 import {QuarkOperationHelper} from "src/builder/QuarkOperationHelper.sol";
 import {List} from "src/builder/List.sol";
 import {QuarkBuilderBase} from "src/builder/QuarkBuilderBase.sol";
+import {Quotes} from "src/builder/Quotes.sol";
 
 contract SwapActionsBuilder is QuarkBuilderBase {
     struct ZeroExSwapIntent {
@@ -32,13 +33,17 @@ contract SwapActionsBuilder is QuarkBuilderBase {
         bool isExactOut;
         uint256 blockTimestamp;
         bool preferAcross;
+        string paymentAssetSymbol;
     }
 
     function swap(
         ZeroExSwapIntent memory swapIntent,
         Accounts.ChainAccounts[] memory chainAccountsList,
-        PaymentInfo.Payment memory payment
+        Quotes.Quote memory quote
     ) external pure returns (BuilderResult memory) {
+        PaymentInfo.Payment memory payment =
+            Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, swapIntent.paymentAssetSymbol);
+
         // If the action is paid for with tokens, filter out any chain accounts that do not have corresponding payment information
         if (payment.isToken) {
             chainAccountsList = Accounts.findChainAccountsWithPaymentInfo(chainAccountsList, payment);
@@ -148,6 +153,7 @@ contract SwapActionsBuilder is QuarkBuilderBase {
         address sender;
         uint256 blockTimestamp;
         bool preferAcross;
+        string paymentAssetSymbol;
     }
 
     // Note: We don't currently bridge the input token or the payment token for recurring swaps. Recurring swaps
@@ -155,8 +161,11 @@ contract SwapActionsBuilder is QuarkBuilderBase {
     function recurringSwap(
         RecurringSwapIntent memory swapIntent,
         Accounts.ChainAccounts[] memory chainAccountsList,
-        PaymentInfo.Payment memory payment
+        Quotes.Quote memory quote
     ) external pure returns (BuilderResult memory) {
+        PaymentInfo.Payment memory payment =
+            Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, swapIntent.paymentAssetSymbol);
+
         // If the action is paid for with tokens, filter out any chain accounts that do not have corresponding payment information
         if (payment.isToken) {
             chainAccountsList = Accounts.findChainAccountsWithPaymentInfo(chainAccountsList, payment);
