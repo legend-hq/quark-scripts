@@ -273,7 +273,6 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         QuarkBuilder.BuilderResult memory result = builder.swap(
             buyUsdc_(1, weth_(1), 1e18, 3000e6, address(0xa11ce), BLOCK_TIMESTAMP, "USD"), // swap 1 ETH on chain 1 to 3000 USDC
             chainAccountsList, // holding 1ETH in total in chains 1
-            // paymentUsd_()
             quote_()
         );
 
