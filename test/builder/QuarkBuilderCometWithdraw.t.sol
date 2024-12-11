@@ -202,7 +202,7 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
 
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
         networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: .5e8});
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.5e8});
 
         QuarkBuilder.BuilderResult memory result = builder.cometWithdraw(
             cometWithdraw_(1, cometUsdc_(1), "USDC", 1e6, "USDC"), // user will be withdrawing 1 USDC
@@ -273,7 +273,7 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
     function testCometWithdrawMax() public {
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
         networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: .1e8});
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
 
         CometPortfolio[] memory cometPortfolios = new CometPortfolio[](1);
         cometPortfolios[0] = CometPortfolio({
@@ -402,8 +402,7 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
 
     function testCometWithdrawCostTooHigh() public {
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](3);
-        networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
         networkOperationFees[1] =
             Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 5e8});
         networkOperationFees[2] =
