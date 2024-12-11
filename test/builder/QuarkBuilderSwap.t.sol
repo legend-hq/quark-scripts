@@ -143,8 +143,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
 
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
-        networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 3e8});
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 3e8});
 
         // The 30e6 is the suggested amount (total available funds) to swap
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 35e6, 30e6));
@@ -350,8 +349,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
 
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
-        networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
 
         QuarkBuilder.BuilderResult memory result = builder.swap(
             buyWeth_(1, usdc_(1), 3000e6, 1e18, address(0xa11ce), BLOCK_TIMESTAMP, "USDC"), // swap 3000 USDC on chain 1 to 1 WETH
@@ -447,8 +445,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
 
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
-        networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
 
         Accounts.ChainAccounts[] memory chainAccountsList = new Accounts.ChainAccounts[](3);
         chainAccountsList[0] = Accounts.ChainAccounts({
@@ -700,8 +697,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
 
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
-        networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
         networkOperationFees[1] =
             Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 1e8});
 
@@ -845,8 +841,7 @@ contract QuarkBuilderSwapTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
 
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
-        networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
         networkOperationFees[1] =
             Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 1e8});
 

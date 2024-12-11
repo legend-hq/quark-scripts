@@ -181,8 +181,7 @@ contract QuarkBuilderRecurringSwapTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
 
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
-        networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 3e8});
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 3e8});
 
         // The 30e6 is the suggested amount (total available funds) to swap
         vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.FundsUnavailable.selector, "USDC", 35e6, 30e6));
@@ -398,8 +397,7 @@ contract QuarkBuilderRecurringSwapTest is Test, QuarkBuilderTest {
         });
 
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
-        networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
+        networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 5e8});
 
         QuarkBuilder.BuilderResult memory result = builder.recurringSwap(
             buyWethIntent, // swap 3000 USDC on chain 1 to 1 WETH
