@@ -86,11 +86,8 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
     function testCometRepayNotEnoughPaymentToken() public {
         QuarkBuilder builder = new QuarkBuilder();
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
-        networkOperationFees[0] = Quotes.NetworkOperationFee({
-            opType: Quotes.OP_TYPE_BASELINE,
-            chainId: 1,
-            price: 0.5e8
-        });
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.5e8});
 
         uint256[] memory collateralAmounts = new uint256[](0);
         string[] memory collateralAssetSymbols = new string[](0);
@@ -147,14 +144,17 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.cometRepay(
-            setRepayPaymentAsset_("USD", repayIntent_(
-                1,
-                cometUsdc_(1),
-                "USDC",
-                1e6, // repaying 1 USDC
-                collateralAssetSymbols,
-                collateralAmounts // withdrawing 1 LINK
-            )),
+            setRepayPaymentAsset_(
+                "USD",
+                repayIntent_(
+                    1,
+                    cometUsdc_(1),
+                    "USDC",
+                    1e6, // repaying 1 USDC
+                    collateralAssetSymbols,
+                    collateralAmounts // withdrawing 1 LINK
+                )
+            ),
             chainAccountsFromChainPortfolios(chainPortfolios),
             quote_()
         );
@@ -275,14 +275,17 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
         QuarkBuilder.BuilderResult memory result = builder.cometRepay(
-            setRepayPaymentAsset_("USD", repayIntent_(
-                1,
-                cometWeth_(1),
-                "WETH",
-                1e18, // repaying 1 WETH
-                collateralAssetSymbols,
-                collateralAmounts // withdrawing 1 LINK
-            )),
+            setRepayPaymentAsset_(
+                "USD",
+                repayIntent_(
+                    1,
+                    cometWeth_(1),
+                    "WETH",
+                    1e18, // repaying 1 WETH
+                    collateralAssetSymbols,
+                    collateralAmounts // withdrawing 1 LINK
+                )
+            ),
             chainAccountsFromChainPortfolios(chainPortfolios),
             quote_()
         );
@@ -363,16 +366,10 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
     function testCometRepayPayFromWithdraw() public {
         QuarkBuilder builder = new QuarkBuilder();
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
-        networkOperationFees[0] = Quotes.NetworkOperationFee({
-            opType: Quotes.OP_TYPE_BASELINE,
-            chainId: 1,
-            price: 0.5e8
-        });
-        networkOperationFees[1] = Quotes.NetworkOperationFee({
-            opType: Quotes.OP_TYPE_BASELINE,
-            chainId: 8453,
-            price: 0.1e8
-        });
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.5e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 0.1e8});
 
         ChainPortfolio[] memory chainPortfolios = new ChainPortfolio[](2);
         chainPortfolios[0] = ChainPortfolio({
@@ -508,16 +505,10 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
 
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
-        networkOperationFees[0] = Quotes.NetworkOperationFee({
-            opType: Quotes.OP_TYPE_BASELINE,
-            chainId: 1,
-            price: 0.1e8
-        });
-        networkOperationFees[1] = Quotes.NetworkOperationFee({
-            opType: Quotes.OP_TYPE_BASELINE,
-            chainId: 8453,
-            price: 0.2e8
-        });
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 0.2e8});
 
         string[] memory collateralAssetSymbols = new string[](1);
         collateralAssetSymbols[0] = "LINK";
@@ -699,11 +690,8 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
 
     function testCometRepayMaxWithQuotePay() public {
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
-        networkOperationFees[0] = Quotes.NetworkOperationFee({
-            opType: Quotes.OP_TYPE_BASELINE,
-            chainId: 1,
-            price: 0.1e8
-        });
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
 
         address[] memory collateralTokens = new address[](0);
         uint256[] memory collateralAmounts = new uint256[](0);
@@ -841,16 +829,10 @@ contract QuarkBuilderCometRepayTest is Test, QuarkBuilderTest {
 
     function testCometRepayMaxWithBridge() public {
         Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
-        networkOperationFees[0] = Quotes.NetworkOperationFee({
-            opType: Quotes.OP_TYPE_BASELINE,
-            chainId: 1,
-            price: 0.1e8
-        });
-        networkOperationFees[1] = Quotes.NetworkOperationFee({
-            opType: Quotes.OP_TYPE_BASELINE,
-            chainId: 8453,
-            price: 0.1e8
-        });
+        networkOperationFees[0] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
+        networkOperationFees[1] =
+            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 0.1e8});
 
         address[] memory collateralTokens = new address[](0);
         uint256[] memory collateralAmounts = new uint256[](0);
