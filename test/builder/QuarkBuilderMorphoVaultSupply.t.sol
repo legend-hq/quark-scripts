@@ -90,7 +90,7 @@ contract QuarkBuilderMorphoVaultSupplyTest is Test, QuarkBuilderTest {
                 paymentAssetSymbol: "USDC"
             }),
             chainAccountsList_(2e6), // holding 2 USDC in total across 1, 8453
-            quote_(networkOperationFees)
+            quote_(networkOperationFees) // but operations cost 1,000 USDC
         );
     }
 
