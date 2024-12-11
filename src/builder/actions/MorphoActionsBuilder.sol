@@ -201,12 +201,13 @@ contract MorphoActionsBuilder is QuarkBuilderBase {
         address[] rewards;
         bytes32[][] proofs;
         bool preferAcross;
+        string paymentAssetSymbol;
     }
 
     function morphoClaimRewards(
         MorphoRewardsClaimIntent memory claimIntent,
         Accounts.ChainAccounts[] memory chainAccountsList,
-        PaymentInfo.Payment memory payment
+        Quotes.Quote memory quote
     ) external pure returns (BuilderResult memory) {
         if (
             claimIntent.accounts.length != claimIntent.claimables.length
@@ -217,7 +218,8 @@ contract MorphoActionsBuilder is QuarkBuilderBase {
             revert InvalidInput();
         }
 
-        bool useQuotecall = false; // never use Quotecall
+        PaymentInfo.Payment memory payment =
+            Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, claimIntent.paymentAssetSymbol);
 
         (
             IQuarkWallet.QuarkOperation memory morphoClaimRewardsQuarkOperation,
@@ -255,7 +257,7 @@ contract MorphoActionsBuilder is QuarkBuilderBase {
                 assetSymbolOuts: assetSymbolOuts,
                 blockTimestamp: claimIntent.blockTimestamp,
                 chainId: claimIntent.chainId,
-                useQuotecall: useQuotecall,
+                useQuotecall: false, // never use quotecall
                 bridgeEnabled: true,
                 autoWrapperEnabled: true,
                 preferAcross: claimIntent.preferAcross
