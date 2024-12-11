@@ -97,6 +97,27 @@ let allTests: [AcceptanceTest] = [
         ),
         skip: true
     ),
+    .init(
+        name: "WIP: Alice repays 75 USDC of a 100 USDC borrow against 0.3 WETH on cUSDCv3 on Ethereum",
+        given: [
+            .tokenBalance(.alice, .amt(0.5, .weth), .ethereum),
+            .cometPositions(.cusdcv3, .ethereum, [
+                .supplied(.alice, .amt(0.3, .weth)),
+                .supplied(.alice, .amt(0.1, .weth)),
+                .borrowed(.alice, .amt(100, .usdc))
+            ]),
+            .quote(.basic)
+        ],
+        when: .transfer(from: .alice, to: .bob, amount: .amt(50, .usdc), on: .arbitrum),
+        // FIXME: this should not revert! borrowed funds should be added to token balance
+        expect: .revert(
+            .fundsUnavailable(
+                Token.usdc.symbol,
+                toWei(tokenAmount: .amt(50, .usdc)),
+                toWei(tokenAmount: .amt(0, .usdc))
+            )
+        )
+    )
 ]
 
 let tests = allTests.filter { !$0.skip }
@@ -250,7 +271,7 @@ func getScriptAddress(_ creationCode: Hex) -> EthAddress {
     return EthAddress(Hex(hash.subdata(in: 12 ..< 32)))!
 }
 
-enum Account: Equatable {
+enum Account: Hashable, Equatable {
     case alice
     case bob
     case stax
@@ -294,9 +315,14 @@ enum Account: Equatable {
     }
 }
 
-enum Comet: Equatable {
+enum Comet: Hashable, Equatable {
     case cusdcv3
     case unknownComet(EthAddress)
+
+    enum Given {
+        case supplied(Account, TokenAmount)
+        case borrowed(Account, TokenAmount)
+    }
 
     static let knownCases: [Comet] = [.cusdcv3]
 
@@ -310,6 +336,13 @@ enum Comet: Equatable {
             fatalError("no market .cusdcv3 for network \(network.description)")
         case let (_, .unknownComet(address)):
             return address
+        }
+    }
+
+    var baseAsset: Token {
+        switch self {
+            case .cusdcv3: return .usdc
+            case .unknownComet(_): return .unknownToken("0x0000000000000000000000000000000000000000")
         }
     }
 
@@ -501,6 +534,7 @@ func toWei(tokenAmount: TokenAmount) -> BigUInt {
 enum Given {
     case tokenBalance(Account, TokenAmount, Network)
     case quote(Quote)
+    case cometPositions(Comet, Network, [Comet.Given])
 }
 
 indirect enum When {
@@ -573,6 +607,7 @@ class Context {
     var prices: [Token: Float]
     var fees: [Network: Float]
     var paymentToken: Token?
+    var cometPositionsIsh: [Comet: [Network: [Account: [Token: Float]]]]
 
     let allNetworks: [Network] = [.ethereum, .base, .arbitrum]
 
@@ -581,6 +616,7 @@ class Context {
         prices = [:]
         fees = [:]
         paymentToken = .none
+        cometPositionsIsh = [:]
 
         for network in allNetworks {
             let assetPositionsList: [QuarkBuilder.Accounts.AssetPositions] = Token.knownCases.map {
@@ -655,6 +691,39 @@ class Context {
                 }
                 return chainAccount
             }
+        case let .cometPositions(comet, network, positionParts):
+            let cometPositions = cometPositionsIsh[comet]
+            if cometPositions == nil {
+                cometPositionsIsh[comet] = [:]
+            }
+            let networkPositions = cometPositionsIsh[comet]![network]
+            if networkPositions == nil {
+                cometPositionsIsh[comet]![network] = [:]
+            }
+            for part in positionParts {
+                switch part {
+                case let .supplied(account, tokenAmount):
+                    let cometAccountPositions = cometPositionsIsh[comet]![network]![account]
+                    if cometAccountPositions == nil {
+                        cometPositionsIsh[comet]![network]![account] = [:]
+                    }
+                    if cometPositionsIsh[comet]![network]![account]![tokenAmount.token] != nil {
+                        cometPositionsIsh[comet]![network]![account]![tokenAmount.token]! += tokenAmount.amount
+                    } else {
+                        cometPositionsIsh[comet]![network]![account]![tokenAmount.token] = tokenAmount.amount
+                    }
+                case let .borrowed(account, tokenAmount):
+                    let cometAccountPositions = cometPositionsIsh[comet]![network]![account]
+                    if cometAccountPositions == nil {
+                        cometPositionsIsh[comet]![network]![account] = [:]
+                    }
+                    if cometPositionsIsh[comet]![network]![account]![tokenAmount.token] != nil {
+                        cometPositionsIsh[comet]![network]![account]![tokenAmount.token]! -= tokenAmount.amount
+                    } else {
+                        cometPositionsIsh[comet]![network]![account]![tokenAmount.token] = -1.0 * tokenAmount.amount
+                    }
+                }
+            }
         case let .quote(quote):
             prices = quote.prices
             fees = quote.fees
@@ -664,6 +733,16 @@ class Context {
     func when(_ when: When) async throws -> Result<
         QuarkBuilder.QuarkBuilderBase.BuilderResult, QuarkBuilder.RevertReason
     > {
+        chainAccounts = chainAccounts.map { chainAccount in
+            return QuarkBuilder.Accounts.ChainAccounts(
+                chainId: chainAccount.chainId,
+                quarkSecrets: chainAccount.quarkSecrets,
+                assetPositionsList: chainAccount.assetPositionsList,
+                cometPositions: reifyCometPositions(cometPositionsIsh),
+                morphoPositions: chainAccount.morphoPositions,
+                morphoVaultPositions: chainAccount.morphoVaultPositions
+            )
+        }
         switch when {
         case let .payWith(token, intent):
             paymentToken = token
@@ -731,6 +810,60 @@ class Context {
             )
         }
     }
+}
+
+func reifyCometPositions(_ cometPositionsIsh: [Comet: [Network: [Account: [Token: Float]]]]) -> [QuarkBuilder.Accounts.CometPositions] {
+    var cometPositionsList: [QuarkBuilder.Accounts.CometPositions] = []
+    for (comet, networkPositions) in cometPositionsIsh {
+        for (network, accountPositions) in networkPositions {
+            var accounts: [EthAddress] = []
+            var supplied: [TokenAmount] = []
+            var borrowed: [TokenAmount] = []
+            var balances: [Token: [TokenAmount]] = [:]
+            for (account, tokenPositions) in accountPositions {
+                accounts.append(account.address)
+                supplied.append(.amt(0, comet.baseAsset))
+                borrowed.append(.amt(0, comet.baseAsset))
+                for (token, amount) in tokenPositions {
+                    if balances[token] == nil {
+                        balances[token] = Array(repeating: .amt(0, token), count: accounts.count)
+                    } else {
+                        balances[token]!.append(.amt(0, token))
+                    }
+                    //
+                    if token == comet.baseAsset {
+                        if amount >= 0 {
+                            supplied[accounts.count - 1] = .amt(amount, token)
+                        } else {
+                            borrowed[accounts.count - 1] = .amt(amount * -1.0, token)
+                        }
+                    } else {
+                        balances[token]![accounts.count - 1] = .amt(amount, token)
+                    }
+                }
+            }
+            cometPositionsList.append(QuarkBuilder.Accounts.CometPositions(
+                comet: comet.address(network: network),
+                basePosition: QuarkBuilder.Accounts.CometBasePosition(
+                    asset: comet.baseAsset.address(network: network),
+                    accounts: accounts,
+                    borrowed: borrowed.map { tokenAmount in toWei(tokenAmount: tokenAmount) },
+                    supplied: supplied.map { tokenAmount in toWei(tokenAmount: tokenAmount) }
+                ),
+                collateralPositions: balances.reduce([], { positions, pair in
+                    let (_, tokenAmounts) = pair
+                    return positions + [QuarkBuilder.Accounts.CometCollateralPosition(
+                        asset: tokenAmounts[0].token.address(network: network),
+                        accounts: accounts,
+                        balances: tokenAmounts.map { tokenAmount in
+                            toWei(tokenAmount: tokenAmount)
+                        }
+                    )]
+                })
+            ))
+        }
+    }
+    return cometPositionsList
 }
 
 enum ANSIColor: String {
