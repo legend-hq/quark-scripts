@@ -73,11 +73,13 @@ let allTests: [AcceptanceTest] = [
             currency: .weth,
             .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(0.5, .weth), on: .ethereum)
         ),
-        expect: .success(.single(
-            .multicall([
-                .supplyToComet(tokenAmount: .amt(0.5, .weth), market: .cusdcv3, network: .ethereum),
-                .quotePay(payment: .amt(0.000025000001, .weth), payee: .stax, quote: .basic),
-            ]))
+        expect: .success(
+            .single(
+                .multicall([
+                    .supplyToComet(tokenAmount: .amt(0.5, .weth), market: .cusdcv3, network: .ethereum),
+                    .quotePay(payment: .amt(0.000025000001, .weth), payee: .stax, quote: .basic),
+                ])
+            )
         )
     ),
     // @skip: Alice cannot supply ETH to comet because Actions.cometSupply doesn't wrap ETH
@@ -91,11 +93,13 @@ let allTests: [AcceptanceTest] = [
             currency: .eth,
             .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(0.5, .eth), on: .ethereum)
         ),
-        expect: .success(.single(
-            .multicall([
-                .supplyToComet(tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
-                .quotePay(payment: .amt(0.000025000001, .eth), payee: .stax, quote: .basic),
-            ]))
+        expect: .success(
+            .single(
+                .multicall([
+                    .supplyToComet(tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
+                    .quotePay(payment: .amt(0.000025000001, .eth), payee: .stax, quote: .basic),
+                ])
+            )
         ),
         skip: true
     ),
@@ -103,11 +107,8 @@ let allTests: [AcceptanceTest] = [
         name: "WIP: Alice repays 75 USDC of a 100 USDC borrow against 0.3 WETH on cUSDCv3 on Ethereum",
         given: [
             .tokenBalance(.alice, .amt(0.5, .weth), .ethereum),
-            .cometPositions(.cusdcv3, .ethereum, [
-                .supplied(.alice, .amt(0.3, .weth)),
-                .supplied(.alice, .amt(0.1, .weth)),
-                .borrowed(.alice, .amt(100, .usdc)),
-            ]),
+            .cometSupply(.alice, .amt(0.3, .weth), .cusdcv3, .ethereum),
+            .cometBorrow(.alice, .amt(100, .usdc), .cusdcv3, .ethereum),
             .quote(.basic),
         ],
         when: .transfer(from: .alice, to: .bob, amount: .amt(50, .usdc), on: .arbitrum),
@@ -521,7 +522,7 @@ enum Token: Hashable, Equatable {
         if let address = Token.networkTokenAddress[network]?[self] {
             return address
         } else {
-            customFatalError("Unknown token \(self) for network \(network)")
+            fatalError("Unknown token \(self) for network \(network)")
         }
     }
 }
@@ -546,7 +547,8 @@ func toWei(tokenAmount: TokenAmount) -> BigUInt {
 enum Given {
     case tokenBalance(Account, TokenAmount, Network)
     case quote(Quote)
-    case cometPositions(Comet, Network, [Comet.Given])
+    case cometSupply(Account, TokenAmount, Comet, Network)
+    case cometBorrow(Account, TokenAmount, Comet, Network)
 }
 
 indirect enum When {
@@ -620,126 +622,65 @@ final class AcceptanceTest: CustomTestArgumentEncodable, CustomStringConvertible
 }
 
 class Context {
-    var chainAccounts: [QuarkBuilder.Accounts.ChainAccounts]
+    let sender: Account
     var prices: [Token: Float]
     var fees: [Network: Float]
     var paymentToken: Token?
-    var cometPositionsIsh: [Comet: [Network: [Account: [Token: Float]]]]
+    var tokenPositions: [Network: [Token: [Account: Float]]]
+    var cometPositions: [Network: [Comet: [Account: (Float, Float, [Token: Float])]]]
 
     let allNetworks: [Network] = [.ethereum, .base, .arbitrum]
 
+    var chainAccounts: [QuarkBuilder.Accounts.ChainAccounts] {
+        allNetworks.map { network in
+            QuarkBuilder.Accounts.ChainAccounts(
+                chainId: BigUInt(network.chainId),
+                quarkSecrets: [
+                    .init(
+                        account: sender.address,
+                        nonceSecret: Hex(
+                            "0x5555555555555555555555555555555555555555555555555555555555555555"
+                        )
+                    ),
+                ],
+                assetPositionsList: reifyTokenPositions(network: network),
+                cometPositions: reifyCometPositions(network: network),
+                morphoPositions: [],
+                morphoVaultPositions: []
+            )
+        }
+    }
+
     init(sender: Account) {
-        chainAccounts = []
+        self.sender = sender
         prices = [:]
         fees = [:]
         paymentToken = .none
-        cometPositionsIsh = [:]
-
-        for network in allNetworks {
-            let assetPositionsList: [QuarkBuilder.Accounts.AssetPositions] = Token.knownCases.map {
-                token in
-                QuarkBuilder.Accounts.AssetPositions(
-                    asset: token.address(network: network),
-                    symbol: token.symbol,
-                    decimals: BigUInt(token.decimals),
-                    usdPrice: BigUInt(token.defaultUsdPrice),
-                    accountBalances: [
-                        QuarkBuilder.Accounts.AccountBalance(
-                            account: sender.address, balance: BigUInt(0)
-                        ),
-                    ]
-                )
-            }
-
-            chainAccounts.append(
-                QuarkBuilder.Accounts.ChainAccounts(
-                    chainId: BigUInt(network.chainId),
-                    quarkSecrets: [
-                        .init(
-                            account: sender.address,
-                            nonceSecret: Hex(
-                                "0x5555555555555555555555555555555555555555555555555555555555555555"
-                            )
-                        ),
-                    ],
-                    assetPositionsList: assetPositionsList,
-                    cometPositions: [],
-                    morphoPositions: [],
-                    morphoVaultPositions: []
-                ))
-        }
+        tokenPositions = [:]
+        cometPositions = [:]
     }
 
     func given(_ given: Given) {
         switch given {
         case let .tokenBalance(account, amount, network):
-            // Change chainAccounts to new chainAccounts s.t. `assetPositionsList` has the given token balance where
-            // the chainId is the given network.
-            let chainId = BigUInt(network.chainId)
-            let balance = BigUInt(amount.amount * pow(10, Float(amount.token.decimals)))
-            chainAccounts = chainAccounts.map { chainAccount in
-                if chainAccount.chainId == chainId {
-                    return QuarkBuilder.Accounts.ChainAccounts(
-                        chainId: chainAccount.chainId,
-                        quarkSecrets: chainAccount.quarkSecrets,
-                        assetPositionsList: chainAccount.assetPositionsList.map { assetPosition in
-                            if assetPosition.asset == amount.token.address(network: network) {
-                                return QuarkBuilder.Accounts.AssetPositions(
-                                    asset: amount.token.address(network: network),
-                                    symbol: amount.token.symbol,
-                                    decimals: BigUInt(amount.token.decimals),
-                                    usdPrice: BigUInt(amount.token.defaultUsdPrice),
-                                    accountBalances: assetPosition.accountBalances.map {
-                                        $0.account == account.address
-                                            ? QuarkBuilder.Accounts.AccountBalance(
-                                                account: account.address,
-                                                balance: balance
-                                            )
-                                            : $0
-                                    }
-                                )
-                            }
-                            return assetPosition
-                        },
-                        cometPositions: chainAccount.cometPositions,
-                        morphoPositions: chainAccount.morphoPositions,
-                        morphoVaultPositions: chainAccount.morphoVaultPositions
-                    )
-                }
-                return chainAccount
+            let currentPosition = tokenPositions[network, default: [:]][amount.token, default: [:]][account] ?? 0.0
+            tokenPositions[network, default: [:]][amount.token, default: [:]][account] = currentPosition + amount.amount
+        case let .cometSupply(account, amount, comet, network):
+            if amount.token == comet.baseAsset {
+                let (currSupply, currBorrow, collaterals) = cometPositions[network, default: [:]][comet, default: [:]][account] ?? (0.0, 0.0, [:])
+                cometPositions[network, default: [:]][comet, default: [:]][account] = (currSupply + amount.amount, currBorrow, collaterals)
+            } else {
+                let (currSupply, currBorrow, collaterals) = cometPositions[network, default: [:]][comet, default: [:]][account] ?? (0.0, 0.0, [:])
+                var updatedCollaterals = collaterals
+                updatedCollaterals[amount.token, default: 0.0] += amount.amount
+                cometPositions[network, default: [:]][comet, default: [:]][account] = (currSupply, currBorrow, updatedCollaterals)
             }
-        case let .cometPositions(comet, network, positionParts):
-            let cometPositions = cometPositionsIsh[comet]
-            if cometPositions == nil {
-                cometPositionsIsh[comet] = [:]
-            }
-            let networkPositions = cometPositionsIsh[comet]![network]
-            if networkPositions == nil {
-                cometPositionsIsh[comet]![network] = [:]
-            }
-            for part in positionParts {
-                switch part {
-                case let .supplied(account, tokenAmount):
-                    let cometAccountPositions = cometPositionsIsh[comet]![network]![account]
-                    if cometAccountPositions == nil {
-                        cometPositionsIsh[comet]![network]![account] = [:]
-                    }
-                    if cometPositionsIsh[comet]![network]![account]![tokenAmount.token] != nil {
-                        cometPositionsIsh[comet]![network]![account]![tokenAmount.token]! += tokenAmount.amount
-                    } else {
-                        cometPositionsIsh[comet]![network]![account]![tokenAmount.token] = tokenAmount.amount
-                    }
-                case let .borrowed(account, tokenAmount):
-                    let cometAccountPositions = cometPositionsIsh[comet]![network]![account]
-                    if cometAccountPositions == nil {
-                        cometPositionsIsh[comet]![network]![account] = [:]
-                    }
-                    if cometPositionsIsh[comet]![network]![account]![tokenAmount.token] != nil {
-                        cometPositionsIsh[comet]![network]![account]![tokenAmount.token]! -= tokenAmount.amount
-                    } else {
-                        cometPositionsIsh[comet]![network]![account]![tokenAmount.token] = -1.0 * tokenAmount.amount
-                    }
-                }
+        case let .cometBorrow(account, amount, comet, network):
+            if amount.token == comet.baseAsset {
+                let (currSupply, currBorrow, collaterals) = cometPositions[network, default: [:]][comet, default: [:]][account] ?? (0.0, 0.0, [:])
+                cometPositions[network, default: [:]][comet, default: [:]][account] = (currSupply, currBorrow + amount.amount, collaterals)
+            } else {
+                fatalError("Cannot borrow non-base asset")
             }
         case let .quote(quote):
             prices = quote.prices
@@ -750,16 +691,18 @@ class Context {
     func when(_ when: When) async throws -> Result<
         QuarkBuilder.QuarkBuilderBase.BuilderResult, QuarkBuilder.RevertReason
     > {
-        chainAccounts = chainAccounts.map { chainAccount in
-            QuarkBuilder.Accounts.ChainAccounts(
-                chainId: chainAccount.chainId,
-                quarkSecrets: chainAccount.quarkSecrets,
-                assetPositionsList: chainAccount.assetPositionsList,
-                cometPositions: reifyCometPositions(cometPositionsIsh),
-                morphoPositions: chainAccount.morphoPositions,
-                morphoVaultPositions: chainAccount.morphoVaultPositions
+        let assetQuotes = prices.map {
+            QuarkBuilder.Quotes.AssetQuote.init(symbol: $0.key.symbol, price: BigUInt($0.value * 1e8))
+        }
+
+        let networkOperationFees = fees.map {
+            QuarkBuilder.Quotes.NetworkOperationFee.init(
+                chainId: BigUInt($0.key.chainId),
+                opType: "BASELINE",
+                price: BigUInt($0.value * 1e8)
             )
         }
+
         switch when {
         case let .payWith(token, intent):
             paymentToken = token
@@ -782,16 +725,8 @@ class Context {
                     quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
                     issuedAt: 0,
                     expiresAt: BigUInt(Date(timeIntervalSinceNow: 1_000_000).timeIntervalSince1970),
-                    assetQuotes: prices.map {
-                        .init(symbol: $0.key.symbol, price: BigUInt($0.value * 1e8))
-                    },
-                    networkOperationFees: fees.map {
-                        .init(
-                            chainId: BigUInt($0.key.chainId),
-                            opType: "BASELINE",
-                            price: BigUInt($0.value * 1e8)
-                        )
-                    }
+                    assetQuotes: assetQuotes,
+                    networkOperationFees: networkOperationFees
                 )
             )
 
@@ -828,60 +763,52 @@ class Context {
             )
         }
     }
-}
 
-func reifyCometPositions(_ cometPositionsIsh: [Comet: [Network: [Account: [Token: Float]]]]) -> [QuarkBuilder.Accounts.CometPositions] {
-    var cometPositionsList: [QuarkBuilder.Accounts.CometPositions] = []
-    for (comet, networkPositions) in cometPositionsIsh {
-        for (network, accountPositions) in networkPositions {
-            var accounts: [EthAddress] = []
-            var supplied: [TokenAmount] = []
-            var borrowed: [TokenAmount] = []
-            var balances: [Token: [TokenAmount]] = [:]
-            for (account, tokenPositions) in accountPositions {
-                accounts.append(account.address)
-                supplied.append(.amt(0, comet.baseAsset))
-                borrowed.append(.amt(0, comet.baseAsset))
-                for (token, amount) in tokenPositions {
-                    if balances[token] == nil {
-                        balances[token] = Array(repeating: .amt(0, token), count: accounts.count)
-                    } else {
-                        balances[token]!.append(.amt(0, token))
-                    }
-                    //
-                    if token == comet.baseAsset {
-                        if amount >= 0 {
-                            supplied[accounts.count - 1] = .amt(amount, token)
-                        } else {
-                            borrowed[accounts.count - 1] = .amt(amount * -1.0, token)
-                        }
-                    } else {
-                        balances[token]![accounts.count - 1] = .amt(amount, token)
-                    }
+    func reifyTokenPositions(network: Network) -> [QuarkBuilder.Accounts.AssetPositions] {
+        Token.knownCases.map { token in
+            QuarkBuilder.Accounts.AssetPositions(
+                asset: token.address(network: network),
+                symbol: token.symbol,
+                decimals: BigUInt(token.decimals),
+                usdPrice: BigUInt(token.defaultUsdPrice),
+                accountBalances: Account.knownCases.map { account in
+                    let amount = tokenPositions[network, default: [:]][token, default: [:]][account] ?? 0.0
+                    return QuarkBuilder.Accounts.AccountBalance(
+                        account: account.address,
+                        balance: BigUInt(amount * pow(10, Float(token.decimals)))
+                    )
+                }
+            )
+        }
+    }
+
+    func reifyCometPositions(network: Network) -> [QuarkBuilder.Accounts.CometPositions] {
+        (cometPositions[network] ?? [:]).map { comet, accountPositions in
+            var collateralPositions: [Token: [Account: Float]] = [:]
+            for (account, position) in accountPositions {
+                for (token, amount) in position.2 {
+                    collateralPositions[token, default: [:]][account] = amount
                 }
             }
-            cometPositionsList.append(QuarkBuilder.Accounts.CometPositions(
+
+            return QuarkBuilder.Accounts.CometPositions(
                 comet: comet.address(network: network),
                 basePosition: QuarkBuilder.Accounts.CometBasePosition(
                     asset: comet.baseAsset.address(network: network),
-                    accounts: accounts,
-                    borrowed: borrowed.map { tokenAmount in toWei(tokenAmount: tokenAmount) },
-                    supplied: supplied.map { tokenAmount in toWei(tokenAmount: tokenAmount) }
+                    accounts: accountPositions.map { account, _ in account.address },
+                    borrowed: accountPositions.map { _, position in toWei(tokenAmount: TokenAmount(amount: position.1, token: comet.baseAsset)) },
+                    supplied: accountPositions.map { _, position in toWei(tokenAmount: TokenAmount(amount: position.0, token: comet.baseAsset)) }
                 ),
-                collateralPositions: balances.reduce([]) { positions, pair in
-                    let (_, tokenAmounts) = pair
-                    return positions + [QuarkBuilder.Accounts.CometCollateralPosition(
-                        asset: tokenAmounts[0].token.address(network: network),
-                        accounts: accounts,
-                        balances: tokenAmounts.map { tokenAmount in
-                            toWei(tokenAmount: tokenAmount)
-                        }
-                    )]
+                collateralPositions: collateralPositions.map { token, accountAmounts in
+                    QuarkBuilder.Accounts.CometCollateralPosition(
+                        asset: token.address(network: network),
+                        accounts: accountAmounts.map { account, amount in account.address },
+                        balances: accountAmounts.map { account, amount in toWei(tokenAmount: TokenAmount(amount: amount, token: token)) }
+                    )
                 }
-            ))
+            )
         }
     }
-    return cometPositionsList
 }
 
 enum ANSIColor: String {
