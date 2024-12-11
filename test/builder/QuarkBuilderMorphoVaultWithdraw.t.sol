@@ -19,11 +19,12 @@ import {QuotePay} from "src/QuotePay.sol";
 import {Quotes} from "src/builder/Quotes.sol";
 
 contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
-    function morphoWithdrawIntent_(uint256 chainId, uint256 amount, string memory assetSymbol, string memory paymentAssetSymbol)
-        internal
-        pure
-        returns (MorphoVaultActionsBuilder.MorphoVaultWithdrawIntent memory)
-    {
+    function morphoWithdrawIntent_(
+        uint256 chainId,
+        uint256 amount,
+        string memory assetSymbol,
+        string memory paymentAssetSymbol
+    ) internal pure returns (MorphoVaultActionsBuilder.MorphoVaultWithdrawIntent memory) {
         return morphoWithdrawIntent_({
             amount: amount,
             assetSymbol: assetSymbol,
@@ -33,11 +34,13 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
         });
     }
 
-    function morphoWithdrawIntent_(uint256 chainId, uint256 amount, string memory assetSymbol, address withdrawer, string memory paymentAssetSymbol)
-        internal
-        pure
-        returns (MorphoVaultActionsBuilder.MorphoVaultWithdrawIntent memory)
-    {
+    function morphoWithdrawIntent_(
+        uint256 chainId,
+        uint256 amount,
+        string memory assetSymbol,
+        address withdrawer,
+        string memory paymentAssetSymbol
+    ) internal pure returns (MorphoVaultActionsBuilder.MorphoVaultWithdrawIntent memory) {
         return MorphoVaultActionsBuilder.MorphoVaultWithdrawIntent({
             amount: amount,
             assetSymbol: assetSymbol,
@@ -116,9 +119,7 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
             Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.1e8});
 
         QuarkBuilder.BuilderResult memory result = builder.morphoVaultWithdraw(
-            morphoWithdrawIntent_(1, 2e6, "USDC", "USDC"),
-            chainAccountsList_(3e6),
-            quote_(networkOperationFees)
+            morphoWithdrawIntent_(1, 2e6, "USDC", "USDC"), chainAccountsList_(3e6), quote_(networkOperationFees)
         );
 
         address morphoVaultActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoVaultActions).creationCode);
@@ -206,9 +207,7 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
             Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.5e8});
 
         QuarkBuilder.BuilderResult memory result = builder.morphoVaultWithdraw(
-            morphoWithdrawIntent_(1, 2e6, "USDC", "USDC"),
-            chainAccountsList_(0),
-            quote_(networkOperationFees)
+            morphoWithdrawIntent_(1, 2e6, "USDC", "USDC"), chainAccountsList_(0), quote_(networkOperationFees)
         );
 
         address morphoVaultActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoVaultActions).creationCode);
@@ -301,7 +300,7 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
         QuarkBuilder.BuilderResult memory result = builder.morphoVaultWithdraw(
             morphoWithdrawIntent_(1, type(uint256).max, "USDC", "USDC"),
             chainAccountsFromChainPortfolios(chainPortfolios), // user has no assets
-            quote_(networkOperationFees)  // but will pay from withdrawn funds
+            quote_(networkOperationFees) // but will pay from withdrawn funds
         );
 
         address morphoVaultActionsAddress = CodeJarHelper.getCodeAddress(type(MorphoVaultActions).creationCode);

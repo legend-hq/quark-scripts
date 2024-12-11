@@ -20,20 +20,28 @@ import {QuotePay} from "src/QuotePay.sol";
 import {Quotes} from "src/builder/Quotes.sol";
 
 contract QuarkBuilderMorphoVaultSupplyTest is Test, QuarkBuilderTest {
-    function morphoSupplyIntent_(uint256 chainId, uint256 amount, string memory assetSymbol, string memory paymentAssetSymbol)
-        internal
-        pure
-        returns (MorphoVaultActionsBuilder.MorphoVaultSupplyIntent memory)
-    {
-        return
-            morphoSupplyIntent_({chainId: chainId, amount: amount, assetSymbol: assetSymbol, sender: address(0xa11ce), paymentAssetSymbol: paymentAssetSymbol});
+    function morphoSupplyIntent_(
+        uint256 chainId,
+        uint256 amount,
+        string memory assetSymbol,
+        string memory paymentAssetSymbol
+    ) internal pure returns (MorphoVaultActionsBuilder.MorphoVaultSupplyIntent memory) {
+        return morphoSupplyIntent_({
+            chainId: chainId,
+            amount: amount,
+            assetSymbol: assetSymbol,
+            sender: address(0xa11ce),
+            paymentAssetSymbol: paymentAssetSymbol
+        });
     }
 
-    function morphoSupplyIntent_(uint256 chainId, uint256 amount, string memory assetSymbol, address sender, string memory paymentAssetSymbol)
-        internal
-        pure
-        returns (MorphoVaultActionsBuilder.MorphoVaultSupplyIntent memory)
-    {
+    function morphoSupplyIntent_(
+        uint256 chainId,
+        uint256 amount,
+        string memory assetSymbol,
+        address sender,
+        string memory paymentAssetSymbol
+    ) internal pure returns (MorphoVaultActionsBuilder.MorphoVaultSupplyIntent memory) {
         return MorphoVaultActionsBuilder.MorphoVaultSupplyIntent({
             amount: amount,
             assetSymbol: assetSymbol,
@@ -307,11 +315,7 @@ contract QuarkBuilderMorphoVaultSupplyTest is Test, QuarkBuilderTest {
         });
 
         QuarkBuilder.BuilderResult memory result =
-            builder.morphoVaultSupply(
-                morphoSupplyIntent_(1, 1e18, "WETH", "USD"),
-                chainAccountsList,
-                quote_()
-            );
+            builder.morphoVaultSupply(morphoSupplyIntent_(1, 1e18, "WETH", "USD"), chainAccountsList, quote_());
 
         assertEq(result.paymentCurrency, "USD", "usd currency");
 
