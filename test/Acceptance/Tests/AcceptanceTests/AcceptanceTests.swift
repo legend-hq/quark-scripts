@@ -76,7 +76,7 @@ let allTests: [AcceptanceTest] = [
         expect: .success(
             .single(
                 .multicall([
-                    .supplyToComet(tokenAmount: .amt(0.5, .weth), market: .cusdcv3, network: .ethereum),
+                    .cometSupply(market: .cusdcv3, amount: .amt(0.5, .weth), on: .ethereum),
                     .quotePay(payment: .amt(0.000025000001, .weth), payee: .stax, quote: .basic),
                 ])
             )
@@ -96,7 +96,7 @@ let allTests: [AcceptanceTest] = [
         expect: .success(
             .single(
                 .multicall([
-                    .supplyToComet(tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
+                    .cometSupply(market: .cusdcv3, amount: .amt(0.5, .eth), on: .ethereum),
                     .quotePay(payment: .amt(0.000025000001, .eth), payee: .stax, quote: .basic),
                 ])
             )
@@ -104,20 +104,20 @@ let allTests: [AcceptanceTest] = [
         skip: true
     ),
     .init(
-        name: "WIP: Alice repays 75 USDC of a 100 USDC borrow against 0.3 WETH on cUSDCv3 on Ethereum",
+        name: "Alice repays 75 USDC of a 100 USDC borrow against 0.3 WETH on cUSDCv3 on Ethereum",
         given: [
             .tokenBalance(.alice, .amt(0.5, .weth), .ethereum),
-            .cometSupply(.alice, .amt(0.3, .weth), .cusdcv3, .ethereum),
-            .cometBorrow(.alice, .amt(100, .usdc), .cusdcv3, .ethereum),
+            .cometSupplied(.alice, .amt(0.3, .weth), .cusdcv3, .ethereum),
+            .cometBorrowed(.alice, .amt(100, .usdc), .cusdcv3, .ethereum),
             .quote(.basic),
         ],
-        when: .transfer(from: .alice, to: .bob, amount: .amt(50, .usdc), on: .arbitrum),
-        // FIXME: this should not revert! borrowed funds should be added to token balance
-        expect: .revert(
-            .fundsUnavailable(
-                Token.usdc.symbol,
-                toWei(tokenAmount: .amt(50, .usdc)),
-                toWei(tokenAmount: .amt(0, .usdc))
+        when: .cometRepayAndWithdraw(from: .alice, market: .cusdcv3, repayAmount: .amt(75, .usdc), withdrawAmounts: [], on: .ethereum),
+        expect: .success(
+            .single(
+                .multicall([
+                    .cometRepayAndWithdraw(market: .cusdcv3, repayAmount: .amt(75, .usdc), withdrawAmounts: [], on: .ethereum),
+                    .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic)
+                ])
             )
         )
     ),
@@ -129,7 +129,8 @@ let filteredTests = tests.contains { $0.only } ? tests.filter { $0.only } : test
 enum Call: CustomStringConvertible, Equatable {
     case bridge(bridge: String, srcNetwork: Network, destinationNetwork: Network, tokenAmount: TokenAmount)
     case transferErc20(tokenAmount: TokenAmount, recipient: Account)
-    case supplyToComet(tokenAmount: TokenAmount, market: Comet, network: Network)
+    case cometSupply(market: Comet, amount: TokenAmount, on: Network)
+    case cometRepayAndWithdraw(market: Comet, repayAmount: TokenAmount, withdrawAmounts: [TokenAmount], on: Network)
     case quotePay(payment: TokenAmount, payee: Account, quote: Quote)
     case multicall(_ calls: [Call])
     case unknownFunctionCall(String, String, ABI.Value)
@@ -140,6 +141,8 @@ enum Call: CustomStringConvertible, Equatable {
         ("TransferActions", TransferActions.creationCode, TransferActions.functions),
         ("Multicall", Multicall.creationCode, Multicall.functions),
         ("QuotePay", QuotePay.creationCode, QuotePay.functions),
+        ("CometSupplyActions", CometSupplyActions.creationCode, CometSupplyActions.functions),
+        ("CometRepayAndWithdrawMultipleAssets", CometRepayAndWithdrawMultipleAssets.creationCode, CometRepayAndWithdrawMultipleAssets.functions),
     ]
 
     static func tryDecodeCall(scriptAddress: EthAddress, calldata: Hex, network: Network) -> Call {
@@ -194,10 +197,10 @@ enum Call: CustomStringConvertible, Equatable {
 
         if scriptAddress == getScriptAddress(CometSupplyActions.creationCode) {
             if let (comet, asset, amount) = try? CometSupplyActions.supplyDecode(input: calldata) {
-                return .supplyToComet(
-                    tokenAmount: Token.getTokenAmount(amount: amount, network: network, address: asset),
+                return .cometSupply(
                     market: Comet.from(network: network, address: comet),
-                    network: network
+                    amount: Token.getTokenAmount(amount: amount, network: network, address: asset),
+                    on: network
                 )
             } else if let (comet, to, asset, amount) = try? CometSupplyActions.supplyToDecode(input: calldata) {
                 print("supplyTo(\(comet) to: \(to) \(asset) \(amount))")
@@ -205,6 +208,19 @@ enum Call: CustomStringConvertible, Equatable {
                 print("supplyFrom(\(comet) from: \(from) to: \(to) \(asset) \(amount))")
             } else if let (comet, assets, amounts) = try? CometSupplyActions.supplyMultipleAssetsDecode(input: calldata) {
                 print("supplyMultipleAssets(\(comet) \(assets) \(amounts))")
+            }
+        }
+
+        if scriptAddress == getScriptAddress(CometRepayAndWithdrawMultipleAssets.creationCode) {
+            if let (comet, assets, amounts, baseAsset, repaidAmount) = try? CometRepayAndWithdrawMultipleAssets.runDecode(input: calldata) {
+                return .cometRepayAndWithdraw(
+                    market: Comet.from(network: network, address: comet),
+                    repayAmount: Token.getTokenAmount(amount: repaidAmount, network: network, address: baseAsset),
+                    withdrawAmounts: zip(assets, amounts).map { (asset, amount) in
+                        Token.getTokenAmount(amount: amount, network: network, address: asset)
+                    },
+                    on: network
+                )
             }
         }
 
@@ -231,9 +247,12 @@ enum Call: CustomStringConvertible, Equatable {
         case let .quotePay(payment, payee, quoteId):
             return
                 "quotePay(\(payment.amount) \(payment.token.symbol) to \(payee.description), quoteId: \(quoteId))"
-        case let .supplyToComet(tokenAmount, market, network):
+        case let .cometSupply(market, tokenAmount, network):
             return
-                "supplyToComet(\(tokenAmount.amount) \(tokenAmount.token.symbol) to \(market.description) on \(network.description))"
+                "cometSupply(\(tokenAmount.amount) \(tokenAmount.token.symbol) to \(market.description) on \(network.description))"
+        case let .cometRepayAndWithdraw(market, repayAmount, withdrawAmounts, network):
+            return
+                "cometRepayAndWithdraw(repay \(repayAmount.amount) \(repayAmount.token.symbol) and withdraw (\(withdrawAmounts.map {tokenAmount in "\(tokenAmount.amount) \(tokenAmount.token.symbol)"})) in \(market.description) on \(network.description))"
         case let .multicall(calls):
             return "multicall(\(calls.map { $0.description }.joined(separator: ", ")))"
         case let .unknownFunctionCall(name, function, value):
@@ -331,11 +350,6 @@ enum Account: Hashable, Equatable {
 enum Comet: Hashable, Equatable {
     case cusdcv3
     case unknownComet(EthAddress)
-
-    enum Given {
-        case supplied(Account, TokenAmount)
-        case borrowed(Account, TokenAmount)
-    }
 
     static let knownCases: [Comet] = [.cusdcv3]
 
@@ -547,13 +561,14 @@ func toWei(tokenAmount: TokenAmount) -> BigUInt {
 enum Given {
     case tokenBalance(Account, TokenAmount, Network)
     case quote(Quote)
-    case cometSupply(Account, TokenAmount, Comet, Network)
-    case cometBorrow(Account, TokenAmount, Comet, Network)
+    case cometSupplied(Account, TokenAmount, Comet, Network)
+    case cometBorrowed(Account, TokenAmount, Comet, Network)
 }
 
 indirect enum When {
     case transfer(from: Account, to: Account, amount: TokenAmount, on: Network)
     case cometSupply(from: Account, market: Comet, amount: TokenAmount, on: Network)
+    case cometRepayAndWithdraw(from: Account, market: Comet, repayAmount: TokenAmount, withdrawAmounts: [TokenAmount], on: Network)
     case payWith(currency: Token, When)
 
     var sender: Account {
@@ -561,6 +576,8 @@ indirect enum When {
         case let .transfer(from, _, _, _):
             return from
         case let .cometSupply(from, _, _, _):
+            return from
+        case let .cometRepayAndWithdraw(from, _, _, _, _):
             return from
         case let .payWith(_, intent):
             return intent.sender
@@ -665,7 +682,7 @@ class Context {
         case let .tokenBalance(account, amount, network):
             let currentPosition = tokenPositions[network, default: [:]][amount.token, default: [:]][account] ?? 0.0
             tokenPositions[network, default: [:]][amount.token, default: [:]][account] = currentPosition + amount.amount
-        case let .cometSupply(account, amount, comet, network):
+        case let .cometSupplied(account, amount, comet, network):
             if amount.token == comet.baseAsset {
                 let (currSupply, currBorrow, collaterals) = cometPositions[network, default: [:]][comet, default: [:]][account] ?? (0.0, 0.0, [:])
                 cometPositions[network, default: [:]][comet, default: [:]][account] = (currSupply + amount.amount, currBorrow, collaterals)
@@ -675,10 +692,12 @@ class Context {
                 updatedCollaterals[amount.token, default: 0.0] += amount.amount
                 cometPositions[network, default: [:]][comet, default: [:]][account] = (currSupply, currBorrow, updatedCollaterals)
             }
-        case let .cometBorrow(account, amount, comet, network):
+        case let .cometBorrowed(account, amount, comet, network):
             if amount.token == comet.baseAsset {
                 let (currSupply, currBorrow, collaterals) = cometPositions[network, default: [:]][comet, default: [:]][account] ?? (0.0, 0.0, [:])
                 cometPositions[network, default: [:]][comet, default: [:]][account] = (currSupply, currBorrow + amount.amount, collaterals)
+                // update the token balance to add the borrowed funds
+                self.given(.tokenBalance(account, amount, network))
             } else {
                 fatalError("Cannot borrow non-base asset")
             }
@@ -717,6 +736,30 @@ class Context {
                     chainId: BigUInt(network.chainId),
                     comet: market.address(network: network),
                     sender: from.address,
+                    preferAcross: false,
+                    paymentAssetSymbol: paymentToken?.symbol ?? when.paymentAssetSymbol
+                ),
+                chainAccountsList: chainAccounts,
+                quote: .init(
+                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    issuedAt: 0,
+                    expiresAt: BigUInt(Date(timeIntervalSinceNow: 1_000_000).timeIntervalSince1970),
+                    assetQuotes: assetQuotes,
+                    networkOperationFees: networkOperationFees
+                )
+            )
+
+        case let .cometRepayAndWithdraw(from, market, repayAmount, withdrawAmounts, network):
+            return try await QuarkBuilder.cometRepay(
+                repayIntent: .init(
+                    amount: toWei(tokenAmount: repayAmount),
+                    assetSymbol: repayAmount.token.symbol,
+                    blockTimestamp: 0,
+                    chainId: BigUInt(network.chainId),
+                    collateralAmounts: withdrawAmounts.map { tokenAmount in toWei(tokenAmount: tokenAmount) },
+                    collateralAssetSymbols: withdrawAmounts.map { tokenAmount in tokenAmount.token.symbol },
+                    comet: market.address(network: network),
+                    repayer: from.address,
                     preferAcross: false,
                     paymentAssetSymbol: paymentToken?.symbol ?? when.paymentAssetSymbol
                 ),
