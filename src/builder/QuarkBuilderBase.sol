@@ -8,13 +8,13 @@ import {IQuarkWallet} from "quark-core/src/interfaces/IQuarkWallet.sol";
 import {Actions} from "src/builder/actions/Actions.sol";
 import {Accounts} from "src/builder/Accounts.sol";
 import {Across, BridgeRoutes} from "src/builder/BridgeRoutes.sol";
+import {BuilderPackHelper} from "src/builder/BuilderPackHelper.sol";
 import {EIP712Helper} from "src/builder/EIP712Helper.sol";
 import {Errors} from "src/builder/Errors.sol";
 import {Math} from "src/lib/Math.sol";
 import {MorphoInfo} from "src/builder/MorphoInfo.sol";
 import {Strings} from "src/builder/Strings.sol";
 import {PaycallWrapper} from "src/builder/PaycallWrapper.sol";
-import {QuotecallWrapper} from "src/builder/QuotecallWrapper.sol";
 import {PaymentInfo} from "src/builder/PaymentInfo.sol";
 import {TokenWrapper} from "src/builder/TokenWrapper.sol";
 import {QuarkOperationHelper} from "src/builder/QuarkOperationHelper.sol";
@@ -48,16 +48,24 @@ contract QuarkBuilderBase {
     /* ===== Custom Errors ===== */
 
     error AssetPositionNotFound();
-    error FundsUnavailable(string assetSymbol, uint256 requiredAmount, uint256 actualAmount);
+    error BadInputInsufficientFunds(string assetSymbol, uint256 requiredAmount, uint256 actualAmount);
+    error BadInputInsufficientFundsForRecurring(string assetSymbol, uint256 requiredAmount, uint256 actualAmount);
+    error BadInputUnbridgeableFunds(string assetSymbol, uint256 requiredAmount, uint256 amountLeftToBridge);
     error InvalidActionType();
     error InvalidInput();
     error MaxCostTooHigh();
     error MissingWrapperCounterpart();
     error BalanceNotRight(uint256 paymentAssetBalance, uint256 assetsIn, uint256 assetsOut);
     error InvalidRepayActionContext();
-    error ImpossibleToConstructQuotePay(string assetSymbol);
-    error UnableToConstructQuotePay(string assetSymbol, uint256 totalQuoteAmount);
     error UnableToConstructPaycall(string assetSymbol, uint256 maxCost);
+    error UnableToConstructActionIntent(
+        bool bridgingError,
+        string bridgeAssetSymbol,
+        uint256 bridgeFees,
+        string quotePayStatus,
+        string paymentAssetSymbol,
+        uint256 quoteAmount
+    );
 
     /**
      * @dev Intent for an action to be executed by the Quark Wallet
@@ -113,14 +121,24 @@ contract QuarkBuilderBase {
 
         // Flag to check if the assetSymbolOut (used/supplied/transferred out) is the same as the payment token
         bool paymentTokenIsPartOfAssetSymbolOuts = false;
+        string memory bridgeErrorSymbol;
+        uint256 bridgeFees;
 
         // Track the amount of each asset that will be bridged to the destination chain
         HashMap.Map memory assetsBridged = HashMap.newMap();
 
         for (uint256 i = 0; i < actionIntent.assetSymbolOuts.length; ++i) {
             string memory assetSymbolOut = actionIntent.assetSymbolOuts[i];
+
+            uint256 aggregateAssetBalance =
+                getAggregateAssetBalance(actionIntent.chainId, assetSymbolOut, chainAccountsList);
+
             // Assert that there are enough of the intent token to complete the action
-            assertFundsAvailable(actionIntent.chainId, assetSymbolOut, actionIntent.amountOuts[i], chainAccountsList);
+            if (aggregateAssetBalance < actionIntent.amountOuts[i]) {
+                // Bad Input :: the specified amount exceeds the cumulative balance
+                revert BadInputInsufficientFunds(assetSymbolOut, actionIntent.amountOuts[i], aggregateAssetBalance);
+            }
+
             // Check if the assetSymbolOut is the same as the payment token
             if (Strings.stringEqIgnoreCase(assetSymbolOut, payment.currency)) {
                 paymentTokenIsPartOfAssetSymbolOuts = true;
@@ -130,8 +148,13 @@ contract QuarkBuilderBase {
             {
                 if (actionIntent.bridgeEnabled) {
                     uint256 amountNeededOnDst = actionIntent.amountOuts[i];
-                    (IQuarkWallet.QuarkOperation[] memory bridgeQuarkOperations, Actions.Action[] memory bridgeActions)
-                    = Actions.constructBridgeOperations(
+                    (
+                        IQuarkWallet.QuarkOperation[] memory bridgeQuarkOperations,
+                        Actions.Action[] memory bridgeActions,
+                        uint256 amountLeftToBridge,
+                        uint256 unbridgeableBalance,
+                        uint256 totalBridgeFees
+                    ) = Actions.constructBridgeOperations(
                         Actions.BridgeOperationInfo({
                             assetSymbol: assetSymbolOut,
                             amountNeededOnDst: amountNeededOnDst,
@@ -145,12 +168,25 @@ contract QuarkBuilderBase {
                         payment
                     );
 
+                    if (amountLeftToBridge > 0 && unbridgeableBalance > 0) {
+                        // Bad Input :: the specified amount exceeds the bridgeable balance
+                        revert BadInputUnbridgeableFunds(assetSymbolOut, amountNeededOnDst, amountLeftToBridge);
+                    }
+
                     // Track how much is actually bridged for each asset
-                    HashMap.addOrPutUint256(assetsBridged, abi.encode(assetSymbolOut), amountNeededOnDst);
+                    HashMap.addOrPutUint256(
+                        assetsBridged, abi.encode(assetSymbolOut), amountNeededOnDst - amountLeftToBridge
+                    );
 
                     for (uint256 j = 0; j < bridgeQuarkOperations.length; ++j) {
                         List.addQuarkOperation(quarkOperations, bridgeQuarkOperations[j]);
                         List.addAction(actions, bridgeActions[j]);
+                    }
+
+                    if (amountLeftToBridge > 0) {
+                        bridgeErrorSymbol = assetSymbolOut;
+                        bridgeFees = totalBridgeFees;
+                        break;
                     }
                 } else {
                     uint256 balanceOnChain =
@@ -160,7 +196,10 @@ contract QuarkBuilderBase {
                         payment.isToken ? PaymentInfo.findMaxCost(payment, actionIntent.chainId) : 0;
                     uint256 availableAssetBalance =
                         balanceOnChain >= maxCostOnChain ? balanceOnChain - maxCostOnChain : 0;
-                    revert FundsUnavailable(assetSymbolOut, amountNeededOnChain, availableAssetBalance);
+
+                    revert BadInputInsufficientFundsForRecurring(
+                        assetSymbolOut, amountNeededOnChain, availableAssetBalance
+                    );
                 }
             }
         }
@@ -198,10 +237,17 @@ contract QuarkBuilderBase {
         List.addAction(actions, action);
         List.addQuarkOperation(quarkOperations, actionQuarkOperation);
 
+        string memory quotePayResult = Strings.OK;
+        uint256 totalQuoteAmount;
+
         // Generate a QuotePay operation if the payment method is with tokens and the action is non-recurring
         if (payment.isToken && !Actions.isRecurringAction(action)) {
-            (IQuarkWallet.QuarkOperation memory quotePayOperation, Actions.Action memory quotePayAction) =
-            generateQuotePayOperation(
+            (
+                IQuarkWallet.QuarkOperation memory quotePayOperation,
+                Actions.Action memory quotePayAction,
+                string memory result,
+                uint256 totalQuoteAmount_
+            ) = generateQuotePayOperation(
                 PaymentBalanceAssertionArgs({
                     actions: List.toActionArray(actions),
                     chainAccountsList: chainAccountsList,
@@ -212,8 +258,18 @@ contract QuarkBuilderBase {
                 })
             );
 
+            quotePayResult = result;
+            totalQuoteAmount = totalQuoteAmount_;
+
             List.addAction(actions, quotePayAction);
             List.addQuarkOperation(quarkOperations, quotePayOperation);
+        }
+
+        bool hasBridgeError = !Strings.stringEqIgnoreCase(bridgeErrorSymbol, "");
+        if (hasBridgeError || !Strings.isOk(quotePayResult)) {
+            revert UnableToConstructActionIntent(
+                hasBridgeError, bridgeErrorSymbol, bridgeFees, quotePayResult, payment.currency, totalQuoteAmount
+            );
         }
 
         // Convert to array
@@ -308,19 +364,11 @@ contract QuarkBuilderBase {
         return actualWithdrawAmount;
     }
 
-    function assertFundsAvailable(
+    function getAggregateAssetBalance(
         uint256 chainId,
         string memory assetSymbol,
-        uint256 amount,
         Accounts.ChainAccounts[] memory chainAccountsList
-    ) internal pure {
-        // If no funds need to be bridged, then this check is satisfied
-        // TODO: We might still need to check the availability of funds on the target chain, e.g. see if
-        // funds are locked in a lending protocol and can't be withdrawn
-        if (!needsBridgedFunds(assetSymbol, amount, chainId, chainAccountsList)) {
-            return;
-        }
-
+    ) internal pure returns (uint256) {
         // Check each chain to see if there are enough action assets to be bridged over
         uint256 aggregateAssetBalance;
         for (uint256 i = 0; i < chainAccountsList.length; ++i) {
@@ -346,9 +394,7 @@ contract QuarkBuilderBase {
             }
         }
 
-        if (aggregateAssetBalance < amount) {
-            revert FundsUnavailable(assetSymbol, amount, aggregateAssetBalance);
-        }
+        return aggregateAssetBalance;
     }
 
     function needsBridgedFunds(
@@ -421,6 +467,10 @@ contract QuarkBuilderBase {
         ActionIntent actionIntent;
     }
 
+    string constant ERROR_IMPOSSIBLE_TO_CONSTRUCT = "IMPOSSIBLE_TO_CONSTRUCT";
+    string constant ERROR_UNABLE_TO_CONSTRUCT = "UNABLE_TO_CONSTRUCT";
+    string constant ERROR_NO_KNOWN_PAYMENT_TOKEN = "NO_KNOWN_PAYMENT_TOKEN";
+
     /**
      * @dev Generate a QuotePay operation on a single chain to cover the quoted costs for all the operations, if possible.
      *      Reverts with FundsUnavailable if no single chain has enough to cover the total quote cost
@@ -428,7 +478,7 @@ contract QuarkBuilderBase {
     function generateQuotePayOperation(PaymentBalanceAssertionArgs memory args)
         internal
         pure
-        returns (IQuarkWallet.QuarkOperation memory, Actions.Action memory)
+        returns (IQuarkWallet.QuarkOperation memory, Actions.Action memory, string memory, uint256)
     {
         // Checks the chain ids that have actions
         List.DynamicArray memory chainIdsInvolved = List.newList();
@@ -484,28 +534,35 @@ contract QuarkBuilderBase {
                 }
             }
 
+            uint256 netPaymentAssetBalanceOnChain = 0;
             if (
                 paymentAssetBalanceOnChain + HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0)
-                    < HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0)
+                    >= HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0)
             ) {
-                // Note: This should be unreachable. Something is very wrong if this hits!
-                revert BalanceNotRight(
-                    paymentAssetBalanceOnChain,
-                    HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0),
-                    HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0)
-                );
+                netPaymentAssetBalanceOnChain = paymentAssetBalanceOnChain
+                    + HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0)
+                    - HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0);
             }
-
-            uint256 netPaymentAssetBalanceOnChain = paymentAssetBalanceOnChain
-                + HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0)
-                - HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0);
 
             // Skip if there is not enough net payment balance on this chain
             if (netPaymentAssetBalanceOnChain < quoteAmount) {
                 continue;
             }
 
-            return Actions.quotePay(
+            (string memory assetResult, address assetAddress) =
+                BuilderPackHelper.knownAssetAddress(paymentTokenSymbol, chainId);
+
+            if (Strings.isError(assetResult) || assetAddress != paymentAssetPositions.asset) {
+                return (
+                    IQuarkWallet.QuarkOperation(bytes32(0), false, address(0), new bytes[](0), "", 0),
+                    Actions.Action(0, address(0), "", "", "", "", bytes32(0), 0),
+                    ERROR_NO_KNOWN_PAYMENT_TOKEN,
+                    quoteAmount
+                );
+            }
+
+            (IQuarkWallet.QuarkOperation memory quotePayOperation, Actions.Action memory quotePayAction) = Actions
+                .quotePay(
                 Actions.QuotePayInfo({
                     chainAccountsList: args.chainAccountsList,
                     assetSymbol: paymentTokenSymbol,
@@ -516,6 +573,8 @@ contract QuarkBuilderBase {
                 }),
                 args.payment
             );
+
+            return (quotePayOperation, quotePayAction, Strings.OK, quoteAmount);
         }
 
         // Unable to construct a proper quote pay, so we try to find a chain that has enough of the payment token and then construct the totalQuoteAmount based on that.
@@ -546,11 +605,12 @@ contract QuarkBuilderBase {
             }
         }
 
-        if (eligibleChainFound) {
-            revert UnableToConstructQuotePay(paymentTokenSymbol, totalQuoteAmount);
-        } else {
-            revert ImpossibleToConstructQuotePay(paymentTokenSymbol);
-        }
+        return (
+            IQuarkWallet.QuarkOperation(bytes32(0), false, address(0), new bytes[](0), "", 0),
+            Actions.Action(0, address(0), "", "", "", "", bytes32(0), 0),
+            eligibleChainFound ? ERROR_UNABLE_TO_CONSTRUCT : ERROR_IMPOSSIBLE_TO_CONSTRUCT,
+            totalQuoteAmount
+        );
     }
 
     /**

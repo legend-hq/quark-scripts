@@ -2,6 +2,17 @@
 pragma solidity ^0.8.27;
 
 library Strings {
+    string constant OK = "OK";
+    string constant ERROR = "ERROR";
+
+    function isError(string memory a) internal pure returns (bool) {
+        return stringEqIgnoreCase(a, ERROR);
+    }
+
+    function isOk(string memory a) internal pure returns (bool) {
+        return stringEqIgnoreCase(a, OK);
+    }
+
     function stringEq(string memory a, string memory b) internal pure returns (bool) {
         return keccak256(abi.encodePacked(a)) == keccak256(abi.encodePacked(b));
     }

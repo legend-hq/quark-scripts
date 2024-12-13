@@ -392,7 +392,17 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "USDC"));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                QuarkBuilderBase.UnableToConstructActionIntent.selector,
+                false,
+                "",
+                0,
+                "IMPOSSIBLE_TO_CONSTRUCT",
+                "USDC",
+                100000000
+            )
+        );
         builder.cometWithdraw(
             cometWithdraw_(1, cometUsdc_(1), "USDC", type(uint256).max, "USDC"),
             chainAccountsFromChainPortfolios(chainPortfolios),
@@ -410,7 +420,17 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
 
         QuarkBuilder builder = new QuarkBuilder();
 
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.ImpossibleToConstructQuotePay.selector, "USDC"));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                QuarkBuilderBase.UnableToConstructActionIntent.selector,
+                false,
+                "",
+                0,
+                "IMPOSSIBLE_TO_CONSTRUCT",
+                "USDC",
+                10e6
+            )
+        );
         builder.cometWithdraw(
             cometWithdraw_(1, cometUsdc_(1), "USDC", 1e6, "USDC"),
             chainAccountsList_(0e6),
