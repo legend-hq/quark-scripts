@@ -98,7 +98,7 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
                 false,
                 "",
                 0,
-                QuarkBuilderBase.GenerateQuotePayStatus.ImpossibleToConstruct,
+                "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
                 1_000e6
             )

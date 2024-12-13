@@ -398,7 +398,7 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
                 false,
                 "",
                 0,
-                QuarkBuilderBase.GenerateQuotePayStatus.ImpossibleToConstruct,
+                "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
                 100000000
             )
@@ -426,7 +426,7 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
                 false,
                 "",
                 0,
-                QuarkBuilderBase.GenerateQuotePayStatus.ImpossibleToConstruct,
+                "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
                 10e6
             )

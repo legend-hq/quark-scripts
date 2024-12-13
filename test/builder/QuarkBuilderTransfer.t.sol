@@ -133,7 +133,7 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
                 false,
                 "",
                 0,
-                QuarkBuilderBase.GenerateQuotePayStatus.ImpossibleToConstruct,
+                "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
                 1_000e6
             )
@@ -183,7 +183,7 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
                 false,
                 "",
                 0,
-                QuarkBuilderBase.GenerateQuotePayStatus.UnableToConstruct,
+                "UNABLE_TO_CONSTRUCT",
                 "USDC",
                 3e6
             )

@@ -8,13 +8,13 @@ import {IQuarkWallet} from "quark-core/src/interfaces/IQuarkWallet.sol";
 import {Actions} from "src/builder/actions/Actions.sol";
 import {Accounts} from "src/builder/Accounts.sol";
 import {Across, BridgeRoutes} from "src/builder/BridgeRoutes.sol";
+import {BuilderPackHelper} from "src/builder/BuilderPackHelper.sol";
 import {EIP712Helper} from "src/builder/EIP712Helper.sol";
 import {Errors} from "src/builder/Errors.sol";
 import {Math} from "src/lib/Math.sol";
 import {MorphoInfo} from "src/builder/MorphoInfo.sol";
 import {Strings} from "src/builder/Strings.sol";
 import {PaycallWrapper} from "src/builder/PaycallWrapper.sol";
-import {QuotecallWrapper} from "src/builder/QuotecallWrapper.sol";
 import {PaymentInfo} from "src/builder/PaymentInfo.sol";
 import {TokenWrapper} from "src/builder/TokenWrapper.sol";
 import {QuarkOperationHelper} from "src/builder/QuarkOperationHelper.sol";
@@ -62,7 +62,7 @@ contract QuarkBuilderBase {
         bool bridgingError,
         string bridgeAssetSymbol,
         uint256 bridgeFees,
-        GenerateQuotePayStatus quotePayStatus,
+        string quotePayStatus,
         string paymentAssetSymbol,
         uint256 quoteAmount
     );
@@ -237,7 +237,7 @@ contract QuarkBuilderBase {
         List.addAction(actions, action);
         List.addQuarkOperation(quarkOperations, actionQuarkOperation);
 
-        GenerateQuotePayStatus quotePayError;
+        string memory quotePayResult = Strings.OK;
         uint256 totalQuoteAmount;
 
         // Generate a QuotePay operation if the payment method is with tokens and the action is non-recurring
@@ -245,7 +245,7 @@ contract QuarkBuilderBase {
             (
                 IQuarkWallet.QuarkOperation memory quotePayOperation,
                 Actions.Action memory quotePayAction,
-                GenerateQuotePayStatus status,
+                string memory result,
                 uint256 totalQuoteAmount_
             ) = generateQuotePayOperation(
                 PaymentBalanceAssertionArgs({
@@ -258,7 +258,7 @@ contract QuarkBuilderBase {
                 })
             );
 
-            quotePayError = status;
+            quotePayResult = result;
             totalQuoteAmount = totalQuoteAmount_;
 
             List.addAction(actions, quotePayAction);
@@ -266,9 +266,9 @@ contract QuarkBuilderBase {
         }
 
         bool hasBridgeError = !Strings.stringEqIgnoreCase(bridgeErrorSymbol, "");
-        if (hasBridgeError || quotePayError != GenerateQuotePayStatus.NoError) {
+        if (hasBridgeError || !Strings.isOk(quotePayResult)) {
             revert UnableToConstructActionIntent(
-                hasBridgeError, bridgeErrorSymbol, bridgeFees, quotePayError, payment.currency, totalQuoteAmount
+                hasBridgeError, bridgeErrorSymbol, bridgeFees, quotePayResult, payment.currency, totalQuoteAmount
             );
         }
 
@@ -467,13 +467,9 @@ contract QuarkBuilderBase {
         ActionIntent actionIntent;
     }
 
-    enum GenerateQuotePayStatus {
-        NoError,
-        // Not enough balance anywhere that exceeds the total quote amount
-        ImpossibleToConstruct,
-        // Not enough remaining balance after intent to construct quote pay
-        UnableToConstruct
-    }
+    string constant ERROR_IMPOSSIBLE_TO_CONSTRUCT = "IMPOSSIBLE_TO_CONSTRUCT";
+    string constant ERROR_UNABLE_TO_CONSTRUCT = "UNABLE_TO_CONSTRUCT";
+    string constant ERROR_NO_KNOWN_PAYMENT_TOKEN = "NO_KNOWN_PAYMENT_TOKEN";
 
     /**
      * @dev Generate a QuotePay operation on a single chain to cover the quoted costs for all the operations, if possible.
@@ -482,7 +478,7 @@ contract QuarkBuilderBase {
     function generateQuotePayOperation(PaymentBalanceAssertionArgs memory args)
         internal
         pure
-        returns (IQuarkWallet.QuarkOperation memory, Actions.Action memory, GenerateQuotePayStatus, uint256)
+        returns (IQuarkWallet.QuarkOperation memory, Actions.Action memory, string memory, uint256)
     {
         // Checks the chain ids that have actions
         List.DynamicArray memory chainIdsInvolved = List.newList();
@@ -553,6 +549,18 @@ contract QuarkBuilderBase {
                 continue;
             }
 
+            (string memory assetResult, address assetAddress) =
+                BuilderPackHelper.knownAssetAddress(paymentTokenSymbol, chainId);
+
+            if (Strings.isError(assetResult) || assetAddress != paymentAssetPositions.asset) {
+                return (
+                    IQuarkWallet.QuarkOperation(bytes32(0), false, address(0), new bytes[](0), "", 0),
+                    Actions.Action(0, address(0), "", "", "", "", bytes32(0), 0),
+                    ERROR_NO_KNOWN_PAYMENT_TOKEN,
+                    quoteAmount
+                );
+            }
+
             (IQuarkWallet.QuarkOperation memory quotePayOperation, Actions.Action memory quotePayAction) = Actions
                 .quotePay(
                 Actions.QuotePayInfo({
@@ -566,7 +574,7 @@ contract QuarkBuilderBase {
                 args.payment
             );
 
-            return (quotePayOperation, quotePayAction, GenerateQuotePayStatus.NoError, quoteAmount);
+            return (quotePayOperation, quotePayAction, Strings.OK, quoteAmount);
         }
 
         // Unable to construct a proper quote pay, so we try to find a chain that has enough of the payment token and then construct the totalQuoteAmount based on that.
@@ -600,7 +608,7 @@ contract QuarkBuilderBase {
         return (
             IQuarkWallet.QuarkOperation(bytes32(0), false, address(0), new bytes[](0), "", 0),
             Actions.Action(0, address(0), "", "", "", "", bytes32(0), 0),
-            eligibleChainFound ? GenerateQuotePayStatus.UnableToConstruct : GenerateQuotePayStatus.ImpossibleToConstruct,
+            eligibleChainFound ? ERROR_UNABLE_TO_CONSTRUCT : ERROR_IMPOSSIBLE_TO_CONSTRUCT,
             totalQuoteAmount
         );
     }

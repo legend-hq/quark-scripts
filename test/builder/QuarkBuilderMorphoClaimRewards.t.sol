@@ -260,7 +260,7 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
                 false,
                 "",
                 0,
-                QuarkBuilderBase.GenerateQuotePayStatus.ImpossibleToConstruct,
+                "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
                 200e6
             )

@@ -543,7 +543,7 @@ contract QuarkBuilderMorphoBorrowTest is Test, QuarkBuilderTest {
                 false,
                 "",
                 0,
-                QuarkBuilderBase.GenerateQuotePayStatus.ImpossibleToConstruct,
+                "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
                 0.5e6
             )

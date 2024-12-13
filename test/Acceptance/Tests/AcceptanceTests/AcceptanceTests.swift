@@ -44,7 +44,12 @@ let allTests: [AcceptanceTest] = [
         when: .transfer(from: .alice, to: .bob, amount: .amt(100, .usdc), on: .arbitrum),
         expect: .revert(
             .unableToConstructActionIntent(
-                false, "", 0, 2, Token.usdc.symbol, toWei(tokenAmount: TokenAmount.amt(0.04, .usdc))
+                false,
+                "", 
+                0, 
+                "UNABLE_TO_CONSTRUCT", 
+                Token.usdc.symbol, 
+                toWei(tokenAmount: TokenAmount.amt(0.04, .usdc))
             )
         )
     ),
@@ -62,7 +67,7 @@ let allTests: [AcceptanceTest] = [
                 true,
                 Token.usdc.symbol,
                 toWei(tokenAmount: TokenAmount.amt(1.5, .usdc)),
-                2,
+                "UNABLE_TO_CONSTRUCT",
                 Token.usdc.symbol,
                 toWei(tokenAmount: TokenAmount.amt(0.06, .usdc))
             )
@@ -105,8 +110,7 @@ let allTests: [AcceptanceTest] = [
         expect: .success(
             .single(
                 .multicall([
-                    .supplyToComet(
-                        tokenAmount: .amt(0.5, .weth), market: .cusdcv3, network: .ethereum),
+                    .supplyToComet(tokenAmount: .amt(0.5, .weth), market: .cusdcv3, network: .ethereum),
                     .quotePay(payment: .amt(0.000025000001, .weth), payee: .stax, quote: .basic),
                 ])
             )
@@ -126,8 +130,7 @@ let allTests: [AcceptanceTest] = [
         expect: .success(
             .single(
                 .multicall([
-                    .supplyToComet(
-                        tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
+                    .supplyToComet(tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
                     .quotePay(payment: .amt(0.000025000001, .eth), payee: .stax, quote: .basic),
                 ])
             )

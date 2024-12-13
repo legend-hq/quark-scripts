@@ -11,4 +11,6 @@ import "@uniswap/swap-router-contracts/contracts/interfaces/IMulticallExtended.s
 import "./IApproveAndCall.sol";
 
 /// @title Router token swapping functionality
-interface ISwapRouter02 is IV2SwapRouter, IV3SwapRouter, IApproveAndCall, IMulticallExtended, ISelfPermit {}
+interface ISwapRouter02 is IV2SwapRouter, IV3SwapRouter, IApproveAndCall, IMulticallExtended, ISelfPermit {
+
+}

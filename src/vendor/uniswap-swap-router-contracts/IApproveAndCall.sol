@@ -3,13 +3,7 @@ pragma solidity >=0.7.6;
 pragma abicoder v2;
 
 interface IApproveAndCall {
-    enum ApprovalType {
-        NOT_REQUIRED,
-        MAX,
-        MAX_MINUS_ONE,
-        ZERO_THEN_MAX,
-        ZERO_THEN_MAX_MINUS_ONE
-    }
+    enum ApprovalType {NOT_REQUIRED, MAX, MAX_MINUS_ONE, ZERO_THEN_MAX, ZERO_THEN_MAX_MINUS_ONE}
 
     /// @dev Lens to be called off-chain to determine which (if any) of the relevant approval functions should be called
     /// @param token The token to approve
@@ -65,8 +59,5 @@ interface IApproveAndCall {
     /// @notice Calls the position manager's increaseLiquidity function
     /// @param params Calldata to pass along to the position manager
     /// @return result The result from the call
-    function increaseLiquidity(IncreaseLiquidityParams calldata params)
-        external
-        payable
-        returns (bytes memory result);
+    function increaseLiquidity(IncreaseLiquidityParams calldata params) external payable returns (bytes memory result);
 }

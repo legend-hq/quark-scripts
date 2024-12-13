@@ -944,8 +944,7 @@ library Actions {
         bytes memory scriptCalldata;
         if (Strings.stringEqIgnoreCase(cometSupply.assetSymbol, "ETH")) {
             // XXX handle wrapping ETH
-        }
-        else {
+        } else {
             scriptCalldata = abi.encodeWithSelector(
                 CometSupplyActions.supply.selector, cometSupply.comet, assetPositions.asset, cometSupply.amount
             );
@@ -1003,8 +1002,7 @@ library Actions {
         bytes memory scriptCalldata;
         if (Strings.stringEqIgnoreCase(cometWithdraw.assetSymbol, "ETH")) {
             // XXX handle unwrapping ETH
-        }
-        else {
+        } else {
             scriptCalldata = abi.encodeWithSelector(
                 CometWithdrawActions.withdraw.selector, cometWithdraw.comet, assetPositions.asset, cometWithdraw.amount
             );
