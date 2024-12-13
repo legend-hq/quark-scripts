@@ -121,6 +121,110 @@ let allTests: [AcceptanceTest] = [
             )
         )
     ),
+
+    // testCometSupplyInsufficientFunds
+    .init(
+        name: "testCometSupplyInsufficientFunds",
+        given: [ .quote(.basic) ],
+        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(2, .usdc), on: .ethereum),
+        expect: .revert(
+            .fundsUnavailable(
+                Token.usdc.symbol,
+                toWei(tokenAmount: .amt(2, .usdc)),
+                toWei(tokenAmount: .amt(0, .usdc))
+            )
+        )
+    ),
+
+    // testCometSupplyMaxCostTooHigh
+    .init(
+        name: "testCometSupplyMaxCostTooHigh",
+        given: [
+            .tokenBalance(.alice, .amt(1.0, .usdc), .ethereum),
+            .tokenBalance(.alice, .amt(1.0, .usdc), .base),
+            .quote(
+                .custom(
+                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    prices: [Token.usdc: 1.0],
+                    fees: [Network.ethereum: 1000]
+                )
+            )
+        ],
+        when: .payWith(
+            currency: .usdc,
+            .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum)
+        ),
+        expect: .revert(
+            .impossibleToConstructQuotePay(
+                Token.usdc.symbol
+            )
+        )
+    ),
+
+    // testCometSupplyFundsUnavailable
+    // .init(
+    //     name: "testCometSupplyFundsUnavailable",
+    //     given: [
+    //         .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
+    //         .tokenBalance(.alice, .amt(1.5, .usdc), .base),
+    //         .quote(.basic)
+    //     ],
+    //     when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .unknown(7777)),
+    //     expect: .revert(
+    //         .fundsUnavailable(
+    //             Token.usdc.symbol,
+    //             toWei(tokenAmount: .amt(2, .usdc)),
+    //             toWei(tokenAmount: .amt(0, .usdc))
+    //         )
+    //     ),
+    //     only: true
+    // ),
+
+    // testSimpleCometSupply
+    .init(
+        name: "testSimpleCometSupply",
+        given: [
+            .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
+            .tokenBalance(.alice, .amt(1.5, .usdc), .base),
+            .quote(.basic)
+        ],
+        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum),
+        expect: .success(
+            .single(
+                .multicall([
+                    .supplyToComet(tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
+                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+                ])
+            )
+        )
+    ),
+
+    // testSimpleCometSupplyMax
+    // .init(
+    //     name: "testSimpleCometSupplyMax",
+    //     given: [
+    //         .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
+    //         .tokenBalance(.alice, .amt(1.5, .usdc), .base),
+    //         .quote(.basic)
+    //     ],
+    //     when: .cometSupply(from: .alice, market: .cusdcv3, amount: maxUInt256Double, on: .ethereum),
+    //     expect: .success(
+    //         .single(
+    //             .multicall([
+    //                 .supplyToComet(tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
+    //                 .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+    //             ])
+    //         )
+    //     ),
+    //     only: true
+    // ),
+
+    // testSimpleCometSupplyWithAutoWrapper
+    // testCometSupplyWithQuotePay
+    // testCometSupplyWithBridge
+    // testCometSupplyMaxWithBridge
+    // testCometSupplyMaxWithBridgeAndQuotePay
+    // testCometSupplyWithBridgeAndQuotePay() public {
 ]
 
 let tests = allTests.filter { !$0.skip }
