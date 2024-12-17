@@ -37,11 +37,6 @@ contract MorphoVaultActionsBuilder is QuarkBuilderBase {
         PaymentInfo.Payment memory payment =
             Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, supplyIntent.paymentAssetSymbol);
 
-        // If the action is paid for with tokens, filter out any chain accounts that do not have corresponding payment information
-        if (payment.isToken) {
-            chainAccountsList = Accounts.findChainAccountsWithPaymentInfo(chainAccountsList, payment);
-        }
-
         // Initialize supply max flag
         bool isMaxSupply = supplyIntent.amount == type(uint256).max;
         bool useQuotecall = isMaxSupply;

@@ -44,11 +44,6 @@ contract CometActionsBuilder is QuarkBuilderBase {
         PaymentInfo.Payment memory payment =
             Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, repayIntent.paymentAssetSymbol);
 
-        // If the action is paid for with tokens, filter out any chain accounts that do not have corresponding payment information
-        if (payment.isToken) {
-            chainAccountsList = Accounts.findChainAccountsWithPaymentInfo(chainAccountsList, payment);
-        }
-
         // XXX confirm that the user is not withdrawing beyond their limits
 
         bool isMaxRepay = repayIntent.amount == type(uint256).max;
@@ -216,10 +211,6 @@ contract CometActionsBuilder is QuarkBuilderBase {
     ) external pure returns (BuilderResult memory /* builderResult */ ) {
         PaymentInfo.Payment memory payment =
             Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, cometSupplyIntent.paymentAssetSymbol);
-        // If the action is paid for with tokens, filter out any chain accounts that do not have corresponding payment information
-        if (payment.isToken) {
-            chainAccountsList = Accounts.findChainAccountsWithPaymentInfo(chainAccountsList, payment);
-        }
 
         // Initialize comet supply max flag
         bool isMaxSupply = cometSupplyIntent.amount == type(uint256).max;

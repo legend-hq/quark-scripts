@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
+import {Arrays} from "test/builder/lib/Arrays.sol";
 import {QuarkBuilderTest} from "test/builder/lib/QuarkBuilderTest.sol";
 
 import {CCTPBridgeActions} from "src/BridgeScripts.sol";
@@ -135,13 +136,13 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
                 0,
                 "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
-                1_000e6
+                1_000.1e6
             )
         );
         builder.transfer(
             transferUsdc_(1, 1e6, address(0xc0b), BLOCK_TIMESTAMP), // transfer 1 USDC on chain 1 to 0xc0b
             chainAccountsList_(2e6), // holding 2 USDC in total across 1, 8453
-            quote_(1, 1_000e8) // but costs $1,000
+            quote_(Arrays.uintArray(1, 8453), Arrays.uintArray(1_000e8, 0.1e8)) // but costs $1,000
         );
     }
 
@@ -164,12 +165,12 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
         QuarkBuilder builder = new QuarkBuilder();
         // The 100e6 is the suggested amount (total available funds) to transfer
         vm.expectRevert(
-            abi.encodeWithSelector(QuarkBuilderBase.BadInputInsufficientFunds.selector, "USDC", 105e6, 100e6)
+            abi.encodeWithSelector(QuarkBuilderBase.BadInputInsufficientFunds.selector, "USDC", 205e6, 200e6)
         );
         builder.transfer(
-            transferUsdc_(1, 105e6, address(0xc0b), BLOCK_TIMESTAMP), // transfer 100 USDC on chain 1 to 0xc0b
+            transferUsdc_(1, 205e6, address(0xc0b), BLOCK_TIMESTAMP), // transfer 100 USDC on chain 1 to 0xc0b
             chainAccountsList_(200e6), // holding 200 USDC in total across 1, 8453
-            quote_(1, 3e8)
+            quote_(Arrays.uintArray(1, 8453), Arrays.uintArray(3e8, 0.3e8))
         );
     }
 
@@ -185,13 +186,13 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
                 0,
                 "UNABLE_TO_CONSTRUCT",
                 "USDC",
-                3e6
+                3.3e6
             )
         );
         builder.transfer(
-            transferUsdc_(1, 100e6, address(0xc0b), BLOCK_TIMESTAMP), // transfer 100 USDC on chain 1 to 0xc0b
+            transferUsdc_(1, 200e6, address(0xc0b), BLOCK_TIMESTAMP), // transfer 100 USDC on chain 1 to 0xc0b
             chainAccountsList_(200e6), // holding 200 USDC in total across 1, 8453
-            quote_(1, 3e8) // but costs $3
+            quote_(Arrays.uintArray(1, 8453), Arrays.uintArray(3e8, 0.3e8)) // but costs $3
         );
     }
 
@@ -847,21 +848,6 @@ contract QuarkBuilderTransferTest is Test, QuarkBuilderTest {
             transferUsdc_(8453, type(uint256).max, address(0xb0b), address(0xceecee), BLOCK_TIMESTAMP), // transfer max USDC on chain 8453 to 0xceecee
             chainAccountsList, // holding 8 USDC on chains 1, 4 USDC on 8453, 5 USDC on 7777
             quote_(networkOperationFees)
-        );
-    }
-
-    function testTransferIgnoresChainIfMaxCostIsNotSpecified() public {
-        QuarkBuilder builder = new QuarkBuilder();
-        // Note: There are 3e6 USDC on each chain, so the Builder should attempt to bridge 2 USDC to chain 8453.
-        // However, max cost is not specified for chain 1, so the Builder will ignore the chain and revert because
-        // there will be insufficient funds for the transfer.
-
-        // The `FundsAvailable` error tells us that 5 USDC was asked to be transferred, but only 3 USDC was available.
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.BadInputInsufficientFunds.selector, "USDC", 5e6, 3e6));
-        builder.transfer(
-            transferUsdc_(8453, 5e6, address(0xceecee), BLOCK_TIMESTAMP), // transfer 5 USDC on chain 8453 to 0xceecee
-            chainAccountsList_(6e6), // holding 6 USDC in total across chains 1, 8453
-            quote_(8453, 0.1e8)
         );
     }
 

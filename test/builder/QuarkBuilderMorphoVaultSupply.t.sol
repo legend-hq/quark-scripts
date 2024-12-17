@@ -19,6 +19,8 @@ import {WrapperActions} from "src/WrapperScripts.sol";
 import {QuotePay} from "src/QuotePay.sol";
 import {Quotes} from "src/builder/Quotes.sol";
 
+import {Arrays} from "test/builder/lib/Arrays.sol";
+
 contract QuarkBuilderMorphoVaultSupplyTest is Test, QuarkBuilderTest {
     function morphoSupplyIntent_(
         uint256 chainId,
@@ -74,10 +76,6 @@ contract QuarkBuilderMorphoVaultSupplyTest is Test, QuarkBuilderTest {
     function testMorphoSupplyMaxCostTooHigh() public {
         QuarkBuilder builder = new QuarkBuilder();
 
-        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](1);
-        networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 1000e8});
-
         vm.expectRevert(
             abi.encodeWithSelector(
                 QuarkBuilderBase.UnableToConstructActionIntent.selector,
@@ -86,7 +84,7 @@ contract QuarkBuilderMorphoVaultSupplyTest is Test, QuarkBuilderTest {
                 0,
                 "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
-                1_000e6
+                1_000.1e6
             )
         );
         builder.morphoVaultSupply(
@@ -100,7 +98,7 @@ contract QuarkBuilderMorphoVaultSupplyTest is Test, QuarkBuilderTest {
                 paymentAssetSymbol: "USDC"
             }),
             chainAccountsList_(2e6), // holding 2 USDC in total across 1, 8453
-            quote_(networkOperationFees) // but operations cost 1,000 USDC
+            quote_({chainIds: Arrays.uintArray(1, 8453, 7777), prices: Arrays.uintArray(1_000e8, 0.1e8, 0.1e8)}) // but operations cost 1,000 USDC
         );
     }
 
@@ -704,17 +702,11 @@ contract QuarkBuilderMorphoVaultSupplyTest is Test, QuarkBuilderTest {
     function testMorphoVaultSupplyMaxWithBridgeAndQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
 
-        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
-        networkOperationFees[0] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 0.5e8});
-        networkOperationFees[1] =
-            Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 8453, price: 0.1e8});
-
         // Note: There are 3e6 USDC on each chain, so the Builder should attempt to bridge 3 - cost (0.6) USDC to chain 8453
         QuarkBuilder.BuilderResult memory result = builder.morphoVaultSupply(
             morphoSupplyIntent_(8453, type(uint256).max, "USDC", address(0xb0b), "USDC"),
             chainAccountsList_(6e6), // holding 3 USDC in total across chains 1, 8453
-            quote_(networkOperationFees)
+            quote_({chainIds: Arrays.uintArray(1, 8453, 7777), prices: Arrays.uintArray(0.5e8, 0.1e8, 0.1e8)})
         );
 
         address cctpBridgeActionsAddress = CodeJarHelper.getCodeAddress(type(CCTPBridgeActions).creationCode);

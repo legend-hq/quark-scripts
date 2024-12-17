@@ -18,6 +18,8 @@ import {WrapperActions} from "src/WrapperScripts.sol";
 import {QuotePay} from "src/QuotePay.sol";
 import {Quotes} from "src/builder/Quotes.sol";
 
+import {Arrays} from "test/builder/lib/Arrays.sol";
+
 contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
     address constant COMET = address(0xc3d688B66703497DAA19211EEdff47f25384cdc3);
     address constant COMET_ETH = address(0xA17581A9E3356d9A858b789D68B4d866e593aE94);
@@ -100,13 +102,14 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
                 0,
                 "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
-                1_000e6
+                1_000.03e6
             )
         );
+
         builder.cometSupply(
             cometSupply_(1, 1e6),
             chainAccountsList_(2e6), // holding 2 USDC in total across 1, 8453
-            quote_(1, 1_000e8) // but costs $1,000
+            quote_({chainIds: Arrays.uintArray(1, 8453, 7777), prices: Arrays.uintArray(1_000e8, 0.03e8, 0.03e8)}) // but costs $1,000
         );
     }
 
@@ -745,20 +748,13 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
 
     function testCometSupplyMaxWithBridgeAndQuotePay() public {
         QuarkBuilder builder = new QuarkBuilder();
-        Quotes.NetworkOperationFee memory networkOperationFeeBase =
-            Quotes.NetworkOperationFee({chainId: 8453, opType: Quotes.OP_TYPE_BASELINE, price: 0.1e8});
-        Quotes.NetworkOperationFee memory networkOperationFeeMainnet =
-            Quotes.NetworkOperationFee({chainId: 1, opType: Quotes.OP_TYPE_BASELINE, price: 0.5e8});
-        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](2);
-        networkOperationFees[0] = networkOperationFeeBase;
-        networkOperationFees[1] = networkOperationFeeMainnet;
 
         // Note: There are 3e6 USDC on each chain, so the Builder should attempt to bridge 2 USDC to chain 8453
         QuarkBuilder.BuilderResult memory result = builder.cometSupply(
             // We need to set Bob as the sender because only he has an account on chain 8453
             cometSupply_(8453, type(uint256).max, address(0xb0b), "USDC"),
             chainAccountsList_(6e6), // holding 3 USDC in total across chains 1, 8453
-            quote_(networkOperationFees)
+            quote_({chainIds: Arrays.uintArray(1, 8453, 7777), prices: Arrays.uintArray(0.5e8, 0.1e8, 0.1e8)})
         );
 
         address cometSupplyActionsAddress = CodeJarHelper.getCodeAddress(type(CometSupplyActions).creationCode);
