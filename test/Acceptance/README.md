@@ -12,13 +12,13 @@ legend-scripts> FOUNDRY_PROFILE=ir forge build
 Then in `tests/Acceptance/` run:
 
 ```sh
-legend-scriptstests/Acceptance> ./Scripts/generate-contract-scripts.sh
+legend-scripts/tests/Acceptance> ./Scripts/generate-contract-scripts.sh
 ```
 
 ## Running Tests
 
 ```sh
-legend-scriptstests/Acceptance> swift test
+legend-scripts/tests/Acceptance> swift test
 ```
 
 ## Example Test

@@ -45,10 +45,10 @@ let allTests: [AcceptanceTest] = [
         expect: .revert(
             .unableToConstructActionIntent(
                 false,
-                "", 
-                0, 
-                "UNABLE_TO_CONSTRUCT", 
-                Token.usdc.symbol, 
+                "",
+                0,
+                "UNABLE_TO_CONSTRUCT",
+                Token.usdc.symbol,
                 toWei(tokenAmount: TokenAmount.amt(0.04, .usdc))
             )
         )
@@ -62,6 +62,26 @@ let allTests: [AcceptanceTest] = [
             .acrossQuote(.amt(1, .usdc), 0.01),
         ],
         when: .transfer(from: .alice, to: .bob, amount: .amt(100, .usdc), on: .arbitrum),
+        expect: .revert(
+            .unableToConstructActionIntent(
+                true,
+                Token.usdc.symbol,
+                toWei(tokenAmount: TokenAmount.amt(1.5, .usdc)),
+                "UNABLE_TO_CONSTRUCT",
+                Token.usdc.symbol,
+                toWei(tokenAmount: TokenAmount.amt(0.06, .usdc))
+            )
+        )
+    ),
+    .init(
+        name: "Alice bridges sumSrcBalance via Across when inputAmount > sumSrcBalance",
+        given: [
+            .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),
+            .tokenBalance(.alice, .amt(50, .usdc), .base),
+            .quote(.basic),
+            .acrossQuote(.amt(1, .usdc), 0.01),
+        ],
+        when: .transfer(from: .alice, to: .bob, amount: .amt(99, .usdc), on: .arbitrum),
         expect: .revert(
             .unableToConstructActionIntent(
                 true,
