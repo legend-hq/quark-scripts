@@ -555,8 +555,12 @@ library Actions {
                     ? amountLeftToBridge
                     : srcAccountBalances[j].balance;
                 if (amountToBridge > 0) {
-                    (IQuarkWallet.QuarkOperation memory operation, Actions.Action memory action, uint256 outputAmount) =
-                    bridgeAsset(
+                    (
+                        IQuarkWallet.QuarkOperation memory operation,
+                        Actions.Action memory action,
+                        uint256 inputAmount,
+                        uint256 outputAmount
+                    ) = bridgeAsset(
                         BridgeAsset({
                             chainAccountsList: chainAccountsList,
                             assetSymbol: bridgeInfo.assetSymbol,
@@ -575,7 +579,7 @@ library Actions {
                     );
 
                     amountLeftToBridge -= outputAmount;
-                    totalBridgeFees += (amountToBridge - outputAmount);
+                    totalBridgeFees += (inputAmount - outputAmount);
 
                     List.addAction(actions, action);
                     List.addQuarkOperation(quarkOperations, operation);
@@ -598,7 +602,7 @@ library Actions {
         PaymentInfo.Payment memory payment,
         bool useQuotecall,
         bool preferAcross
-    ) internal pure returns (IQuarkWallet.QuarkOperation memory, Action memory, uint256) {
+    ) internal pure returns (IQuarkWallet.QuarkOperation memory, Action memory, uint256, uint256) {
         bool acrossCanBridge = Across.canBridge(bridge.srcChainId, bridge.destinationChainId, bridge.assetSymbol);
         bool cctpCanBridge = CCTP.canBridge(bridge.srcChainId, bridge.destinationChainId, bridge.assetSymbol);
 
@@ -623,7 +627,7 @@ library Actions {
     function bridgeCCTP(BridgeAsset memory bridge, PaymentInfo.Payment memory payment, bool useQuotecall)
         internal
         pure
-        returns (IQuarkWallet.QuarkOperation memory, Action memory, uint256)
+        returns (IQuarkWallet.QuarkOperation memory, Action memory, uint256, uint256)
     {
         console.log("Bridging via CCTP", bridge.assetSymbol);
 
@@ -679,13 +683,13 @@ library Actions {
             totalPlays: 1
         });
 
-        return (quarkOperation, action, bridge.amount);
+        return (quarkOperation, action, bridge.amount, bridge.amount);
     }
 
     function bridgeAcross(BridgeAsset memory bridge, PaymentInfo.Payment memory payment, bool useQuotecall)
         internal
         pure
-        returns (IQuarkWallet.QuarkOperation memory, Action memory, uint256)
+        returns (IQuarkWallet.QuarkOperation memory, Action memory, uint256, uint256)
     {
         console.log("Bridging via Across", bridge.assetSymbol);
         console.log("Bridging from", bridge.srcChainId);
@@ -775,7 +779,7 @@ library Actions {
             totalPlays: 1
         });
 
-        return (quarkOperation, action, outputAmount);
+        return (quarkOperation, action, inputAmount, outputAmount);
     }
 
     function cometBorrow(CometBorrowInput memory borrowInput, PaymentInfo.Payment memory payment)
