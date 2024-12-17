@@ -400,7 +400,7 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
                 0,
                 "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
-                100000000
+                0
             )
         );
         builder.cometWithdraw(
@@ -428,7 +428,7 @@ contract QuarkBuilderCometWithdrawTest is Test, QuarkBuilderTest {
                 0,
                 "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
-                10e6
+                0
             )
         );
         builder.cometWithdraw(

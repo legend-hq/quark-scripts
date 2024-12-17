@@ -399,7 +399,7 @@ contract QuarkBuilderMorphoVaultWithdrawTest is Test, QuarkBuilderTest {
                 0,
                 "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
-                100e6
+                0
             )
         );
         builder.morphoVaultWithdraw(

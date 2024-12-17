@@ -118,6 +118,19 @@ contract QuarkBuilderTest {
         return quote_(networkOperationFees);
     }
 
+    function quote_(uint256[] memory chainIds, uint256[] memory prices) internal pure returns (Quotes.Quote memory) {
+        Quotes.NetworkOperationFee[] memory networkOperationFees = new Quotes.NetworkOperationFee[](chainIds.length);
+
+        for (uint256 i = 0; i < chainIds.length; ++i) {
+            Quotes.NetworkOperationFee memory networkOperationFee =
+                Quotes.NetworkOperationFee({chainId: chainIds[i], opType: Quotes.OP_TYPE_BASELINE, price: prices[i]});
+
+            networkOperationFees[i] = networkOperationFee;
+        }
+
+        return quote_(networkOperationFees);
+    }
+
     function quote_(Quotes.NetworkOperationFee[] memory networkOperationFees)
         internal
         pure

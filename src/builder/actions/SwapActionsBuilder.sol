@@ -44,11 +44,6 @@ contract SwapActionsBuilder is QuarkBuilderBase {
         PaymentInfo.Payment memory payment =
             Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, swapIntent.paymentAssetSymbol);
 
-        // If the action is paid for with tokens, filter out any chain accounts that do not have corresponding payment information
-        if (payment.isToken) {
-            chainAccountsList = Accounts.findChainAccountsWithPaymentInfo(chainAccountsList, payment);
-        }
-
         IQuarkWallet.QuarkOperation memory operation;
         Actions.Action memory action;
         IQuarkWallet.QuarkOperation[] memory quarkOperationsArray;
@@ -165,11 +160,6 @@ contract SwapActionsBuilder is QuarkBuilderBase {
     ) external pure returns (BuilderResult memory) {
         PaymentInfo.Payment memory payment =
             Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, swapIntent.paymentAssetSymbol);
-
-        // If the action is paid for with tokens, filter out any chain accounts that do not have corresponding payment information
-        if (payment.isToken) {
-            chainAccountsList = Accounts.findChainAccountsWithPaymentInfo(chainAccountsList, payment);
-        }
 
         // Then, set up the recurring swap operation
         (IQuarkWallet.QuarkOperation memory operation, Actions.Action memory action) = Actions.recurringSwap(

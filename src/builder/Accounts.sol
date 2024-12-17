@@ -194,22 +194,6 @@ library Accounts {
         revert QuarkSecretNotFound(account);
     }
 
-    function findChainAccountsWithPaymentInfo(
-        ChainAccounts[] memory chainAccountsList,
-        PaymentInfo.Payment memory payment
-    ) internal pure returns (ChainAccounts[] memory found) {
-        ChainAccounts[] memory filteredAccounts = new ChainAccounts[](chainAccountsList.length);
-        uint256 count = 0;
-
-        for (uint256 i = 0; i < chainAccountsList.length; ++i) {
-            if (PaymentInfo.hasMaxCostForChain(payment, chainAccountsList[i].chainId)) {
-                filteredAccounts[count++] = chainAccountsList[i];
-            }
-        }
-
-        return truncate(filteredAccounts, count);
-    }
-
     function sumBalances(AssetPositions memory assetPositions) internal pure returns (uint256) {
         uint256 total = 0;
         for (uint256 i = 0; i < assetPositions.accountBalances.length; ++i) {
@@ -247,14 +231,6 @@ library Accounts {
                 Accounts.findAssetPositions(tokenSymbol, chainAccountsList[i].chainId, chainAccountsList)
             );
 
-            // Account for max cost if the payment token is the transfer token
-            // Simply subtract the max cost from the available asset batch
-            if (payment.isToken && Strings.stringEqIgnoreCase(payment.currency, tokenSymbol)) {
-                // Use subtractFlooredAtZero to prevent errors from underflowing
-                balance =
-                    Math.subtractFlooredAtZero(balance, PaymentInfo.findMaxCost(payment, chainAccountsList[i].chainId));
-            }
-
             // If the wrapper contract exists in the chain, add the balance of the wrapped/unwrapped token here as well
             // Subtract with another max cost for wrapping/unwrapping action when the counter part is payment token
             uint256 counterpartBalance = 0;
@@ -267,18 +243,31 @@ library Accounts {
                         chainAccountsList
                     )
                 );
-                // If the wrapped token is the payment token, subtract the max cost
-                if (
-                    payment.isToken
-                        && Strings.stringEqIgnoreCase(
-                            payment.currency,
-                            TokenWrapper.getWrapperCounterpartSymbol(chainAccountsList[i].chainId, tokenSymbol)
-                        )
-                ) {
-                    counterpartBalance = Math.subtractFlooredAtZero(
-                        counterpartBalance, PaymentInfo.findMaxCost(payment, chainAccountsList[i].chainId)
-                    );
-                }
+            }
+
+            if (balance + counterpartBalance == 0) {
+                continue;
+            }
+
+            // Account for max cost if the payment token is the transfer token
+            // Simply subtract the max cost from the available asset batch
+            if (payment.isToken && Strings.stringEqIgnoreCase(payment.currency, tokenSymbol)) {
+                // Use subtractFlooredAtZero to prevent errors from underflowing
+                balance =
+                    Math.subtractFlooredAtZero(balance, PaymentInfo.findMaxCost(payment, chainAccountsList[i].chainId));
+            }
+
+            // If the wrapped token is the payment token, subtract the max cost
+            if (
+                payment.isToken
+                    && Strings.stringEqIgnoreCase(
+                        payment.currency,
+                        TokenWrapper.getWrapperCounterpartSymbol(chainAccountsList[i].chainId, tokenSymbol)
+                    )
+            ) {
+                counterpartBalance = Math.subtractFlooredAtZero(
+                    counterpartBalance, PaymentInfo.findMaxCost(payment, chainAccountsList[i].chainId)
+                );
             }
 
             total += balance + counterpartBalance;

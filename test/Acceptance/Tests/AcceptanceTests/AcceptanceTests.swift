@@ -74,6 +74,31 @@ let allTests: [AcceptanceTest] = [
         )
     ),
     .init(
+        name: "Alice attempts to transfers 75 USDC to Bob on Arbitrum via Bridge but doesn't have all the quotes",
+        given: [
+            .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),
+            .tokenBalance(.alice, .amt(50, .usdc), .base),
+            .quote(
+                .custom(
+                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    prices: Dictionary(
+                        uniqueKeysWithValues: Token.knownCases.map { token in
+                            (token, token.defaultUsdPrice)
+                        }
+                    ),
+                    fees: [
+                        .arbitrum: 0.04,
+                    ]
+                )
+            ),
+            .acrossQuote(.amt(1, .usdc), 0.01),
+        ],
+        when: .transfer(from: .alice, to: .bob, amount: .amt(75, .usdc), on: .arbitrum),
+        expect: .revert(
+            .maxCostMissingForChain(BigUInt(Network.base.chainId))
+        )
+    ),
+    .init(
         name: "Alice transfers USDC to Bob on Arbitrum via Bridge",
         given: [
             .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),

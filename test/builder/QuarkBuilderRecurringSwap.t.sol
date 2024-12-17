@@ -186,7 +186,9 @@ contract QuarkBuilderRecurringSwapTest is Test, QuarkBuilderTest {
         networkOperationFees[0] = Quotes.NetworkOperationFee({opType: Quotes.OP_TYPE_BASELINE, chainId: 1, price: 3e8});
 
         // The 30e6 is the suggested amount (total available funds) to swap
-        vm.expectRevert(abi.encodeWithSelector(QuarkBuilderBase.BadInputInsufficientFunds.selector, "USDC", 35e6, 30e6));
+        vm.expectRevert(
+            abi.encodeWithSelector(QuarkBuilderBase.BadInputInsufficientFundsForRecurring.selector, "USDC", 35e6, 27e6)
+        );
         builder.recurringSwap(
             buyWeth_({
                 chainId: 1,

@@ -36,6 +36,21 @@ library Arrays {
         return uints;
     }
 
+    function uintArray(uint256 uint0, uint256 uint1) internal pure returns (uint256[] memory) {
+        uint256[] memory uints = new uint256[](2);
+        uints[0] = uint0;
+        uints[1] = uint1;
+        return uints;
+    }
+
+    function uintArray(uint256 uint0, uint256 uint1, uint256 uint2) internal pure returns (uint256[] memory) {
+        uint256[] memory uints = new uint256[](3);
+        uints[0] = uint0;
+        uints[1] = uint1;
+        uints[2] = uint2;
+        return uints;
+    }
+
     function uintArray(uint256 uint0, uint256 uint1, uint256 uint2, uint256 uint3)
         internal
         pure

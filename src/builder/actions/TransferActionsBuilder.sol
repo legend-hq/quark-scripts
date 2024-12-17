@@ -38,11 +38,6 @@ contract TransferActionsBuilder is QuarkBuilderBase {
         PaymentInfo.Payment memory payment =
             Quotes.getPaymentFromQuotesAndSymbol(chainAccountsList, quote, transferIntent.paymentAssetSymbol);
 
-        // If the action is paid for with tokens, filter out any chain accounts that do not have corresponding payment information
-        if (payment.isToken) {
-            chainAccountsList = Accounts.findChainAccountsWithPaymentInfo(chainAccountsList, payment);
-        }
-
         // Initialize TransferMax flag
         bool isMaxTransfer = transferIntent.amount == type(uint256).max;
         // TransferMax will always use quotecall to avoid leaving dust in wallet

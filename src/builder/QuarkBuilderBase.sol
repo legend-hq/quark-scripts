@@ -511,13 +511,6 @@ contract QuarkBuilderBase {
         for (uint256 i = 0; i < args.chainAccountsList.length; ++i) {
             uint256 chainId = args.chainAccountsList[i].chainId;
 
-            // Generate quote amount based on which chains have an operation on them
-            uint256 quoteAmount = PaymentInfo.totalCost(args.payment, List.toUint256Array(chainIdsInvolved));
-            // Add the quote for the current chain if it is not already included in the sum
-            if (!List.contains(chainIdsInvolved, chainId)) {
-                quoteAmount += PaymentInfo.findMaxCost(args.payment, chainId);
-            }
-
             // Calculate the net payment balance on this chain
             // TODO: Need to be modified when supporting multiple accounts per chain, since this currently assumes all assets are in one account.
             //       Will need a 2D map for assetsIn/Out to map from chainId -> account
@@ -542,6 +535,19 @@ contract QuarkBuilderBase {
                 netPaymentAssetBalanceOnChain = paymentAssetBalanceOnChain
                     + HashMap.getOrDefaultUint256(assetsInPerChain, abi.encode(chainId), 0)
                     - HashMap.getOrDefaultUint256(assetsOutPerChain, abi.encode(chainId), 0);
+            }
+
+            // Skip if there is no net payment balance on this chain
+            if (netPaymentAssetBalanceOnChain == 0) {
+                continue;
+            }
+
+            // Generate quote amount based on which chains have an operation on them
+            uint256 quoteAmount = PaymentInfo.totalCost(args.payment, List.toUint256Array(chainIdsInvolved));
+
+            // Add the quote for the current chain if it is not already included in the sum
+            if (!List.contains(chainIdsInvolved, chainId)) {
+                quoteAmount += PaymentInfo.findMaxCost(args.payment, chainId);
             }
 
             // Skip if there is not enough net payment balance on this chain
@@ -585,19 +591,23 @@ contract QuarkBuilderBase {
         for (uint256 i = 0; i < args.chainAccountsList.length; ++i) {
             uint256 chainId = args.chainAccountsList[i].chainId;
 
-            // Generate quote amount based on which chains have an operation on them
-            totalQuoteAmount = PaymentInfo.totalCost(args.payment, List.toUint256Array(chainIdsInvolved));
-            // Add the quote for the current chain if it is not already included in the sum
-            if (!List.contains(chainIdsInvolved, chainId)) {
-                totalQuoteAmount += PaymentInfo.findMaxCost(args.payment, chainId);
-            }
-
             // Calculate the net payment balance on this chain
             // TODO: Need to be modified when supporting multiple accounts per chain, since this currently assumes all assets are in one account.
             //       Will need a 2D map for assetsIn/Out to map from chainId -> account
             Accounts.AssetPositions memory paymentAssetPositions =
                 Accounts.findAssetPositions(paymentTokenSymbol, args.chainAccountsList[i].assetPositionsList);
             uint256 paymentAssetBalanceOnChain = Accounts.sumBalances(paymentAssetPositions);
+
+            if (paymentAssetBalanceOnChain == 0) {
+                continue;
+            }
+
+            // Generate quote amount based on which chains have an operation on them
+            totalQuoteAmount = PaymentInfo.totalCost(args.payment, List.toUint256Array(chainIdsInvolved));
+            // Add the quote for the current chain if it is not already included in the sum
+            if (!List.contains(chainIdsInvolved, chainId)) {
+                totalQuoteAmount += PaymentInfo.findMaxCost(args.payment, chainId);
+            }
 
             if (paymentAssetBalanceOnChain >= totalQuoteAmount) {
                 eligibleChainFound = true;
