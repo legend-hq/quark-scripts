@@ -455,7 +455,7 @@ contract QuarkBuilderCometSupplyTest is Test, QuarkBuilderTest {
         QuarkBuilder.BuilderResult memory result = builder.cometSupply(
             // We need to set Bob as the sender because only he has an account on chain 8453
             cometSupply_(8453, 5e6, address(0xb0b), "USD"),
-            chainAccountsList_(6e6), // holding 3 USDC in total across chains 1, 8453
+            chainAccountsList_(6e6), // holding 6 USDC in total across chains 1, 8453
             quote_()
         );
 

@@ -121,6 +121,93 @@ let allTests: [AcceptanceTest] = [
             )
         )
     ),
+    .init(
+        name: "Alice supplies, but does not allow enough for quote pay (testCometSupplyInsufficientFunds)",
+        given: [ .quote(.basic) ],
+        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(2, .usdc), on: .ethereum),
+        expect: .revert(
+            .fundsUnavailable(
+                Token.usdc.symbol,
+                toWei(tokenAmount: .amt(2, .usdc)),
+                toWei(tokenAmount: .amt(0, .usdc))
+            )
+        )
+    ),
+    .init(
+        name: "Alice supplies, but cannot cover operation cost (testCometSupplyMaxCostTooHigh)",
+        given: [
+            .tokenBalance(.alice, .amt(1.0, .usdc), .ethereum),
+            .tokenBalance(.alice, .amt(1.0, .usdc), .base),
+            .quote(
+                .custom(
+                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    prices: [Token.usdc: 1.0],
+                    fees: [Network.ethereum: 1000]
+                )
+            )
+        ],
+        when: .payWith(
+            currency: .usdc,
+            .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum)
+        ),
+        expect: .revert(
+            .impossibleToConstructQuotePay(
+                Token.usdc.symbol
+            )
+        )
+    ),
+    .init(
+        name: "Alice supplies to Comet (testSimpleCometSupply)",
+        given: [
+            .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
+            .tokenBalance(.alice, .amt(1.5, .usdc), .base),
+            .quote(.basic)
+        ],
+        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum),
+        expect: .success(
+            .single(
+                .multicall([
+                    .supplyToComet(tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
+                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+                ])
+            )
+        )
+    ),
+    .init(
+        name: "Alice supplies max to Comet (testSimpleCometSupplyMax)",
+        given: [
+            .tokenBalance(.alice, .amt(3, .usdc), .ethereum),
+            .quote(.basic)
+        ],
+        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .max(.usdc), on: .ethereum),
+        expect: .success(
+            .single(
+                .multicall([
+                    .supplyToComet(tokenAmount: .amt(2.9, .usdc), market: .cusdcv3, network: .ethereum),
+                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+                ])
+            )
+
+        )
+    ),
+    .init(
+        name: "Alice supplies to Comet, paying via Quote Pay (testCometSupplyWithQuotePay)",
+        given: [
+            .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
+            .tokenBalance(.alice, .amt(1.5, .usdc), .base),
+            .quote(.basic)
+        ],
+        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum),
+        expect: .success(
+            .single(
+                .multicall([
+                    .supplyToComet(tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
+                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+                ])
+            )
+
+        )
+    )
 ]
 
 let tests = allTests.filter { !$0.skip }
@@ -472,7 +559,7 @@ enum Token: Hashable, Equatable {
         -> TokenAmount
     {
         let token = Token.from(network: network, address: address)
-        return TokenAmount(amount: Float(amount) / pow(10, Float(token.decimals)), token: token)
+        return TokenAmount.specifiedAmount(Float(amount) / pow(10, Float(token.decimals)), token)
     }
 
     func hash(into hasher: inout Hasher) {
@@ -527,21 +614,44 @@ enum Token: Hashable, Equatable {
     }
 }
 
-struct TokenAmount: Equatable {
-    let amount: Float
-    let token: Token
+enum TokenAmount: Equatable, Sendable {
+    case specifiedAmount(Float, Token)
+    case max(Token)
 
     static func == (lhs: TokenAmount, rhs: TokenAmount) -> Bool {
         return lhs.amount == rhs.amount && lhs.token == rhs.token
     }
 
     static func amt(_ amount: Float, _ token: Token) -> TokenAmount {
-        return TokenAmount(amount: amount, token: token)
+        return TokenAmount.specifiedAmount(amount, token)
+    }
+
+    var token: Token {
+        switch self {
+            case let .specifiedAmount(_, t):
+                return t
+            case let .max(t):
+                return t
+        }
+    }
+
+    var amount: Float {
+        switch self {
+            case let .specifiedAmount(a, _):
+                return a
+            case .max(_):
+                fatalError("cannot operate on intermediate amount for TokenAmount.max")
+        }
     }
 }
 
 func toWei(tokenAmount: TokenAmount) -> BigUInt {
-    return BigUInt(tokenAmount.amount * pow(10, Float(tokenAmount.token.decimals)))
+    switch tokenAmount {
+        case let .specifiedAmount(a, t):
+            return BigUInt(a * pow(10, Float(t.decimals)))
+        case .max(_):
+            return BigUInt(1) << 256 - 1
+    }
 }
 
 enum Given {
@@ -551,7 +661,7 @@ enum Given {
     case cometBorrow(Account, TokenAmount, Comet, Network)
 }
 
-indirect enum When {
+indirect enum When: Sendable {
     case transfer(from: Account, to: Account, amount: TokenAmount, on: Network)
     case cometSupply(from: Account, market: Comet, amount: TokenAmount, on: Network)
     case payWith(currency: Token, When)
@@ -796,14 +906,14 @@ class Context {
                 basePosition: QuarkBuilder.Accounts.CometBasePosition(
                     asset: comet.baseAsset.address(network: network),
                     accounts: accountPositions.map { account, _ in account.address },
-                    borrowed: accountPositions.map { _, position in toWei(tokenAmount: TokenAmount(amount: position.1, token: comet.baseAsset)) },
-                    supplied: accountPositions.map { _, position in toWei(tokenAmount: TokenAmount(amount: position.0, token: comet.baseAsset)) }
+                    borrowed: accountPositions.map { _, position in toWei(tokenAmount: TokenAmount.specifiedAmount(position.1, comet.baseAsset)) },
+                    supplied: accountPositions.map { _, position in toWei(tokenAmount: TokenAmount.specifiedAmount(position.0, comet.baseAsset)) }
                 ),
                 collateralPositions: collateralPositions.map { token, accountAmounts in
                     QuarkBuilder.Accounts.CometCollateralPosition(
                         asset: token.address(network: network),
                         accounts: accountAmounts.map { account, amount in account.address },
-                        balances: accountAmounts.map { account, amount in toWei(tokenAmount: TokenAmount(amount: amount, token: token)) }
+                        balances: accountAmounts.map { account, amount in toWei(tokenAmount: TokenAmount.specifiedAmount(amount, token)) }
                     )
                 }
             )
