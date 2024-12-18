@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import {Accounts} from "src/builder/Accounts.sol";
 import {PaymentInfo} from "src/builder/PaymentInfo.sol";
 import {Strings} from "src/builder/Strings.sol";
+import {Math} from "src/lib/Math.sol";
 
 library Quotes {
     string public constant OP_TYPE_BASELINE = "BASELINE";
@@ -71,7 +72,8 @@ library Quotes {
 
             paymentMaxCosts[i] = PaymentInfo.PaymentMaxCost({
                 chainId: networkOperationFee.chainId,
-                amount: (networkOperationFee.price * (10 ** singularAssetPositionsForSymbol.decimals)) / assetQuote.price
+                amount: (networkOperationFee.price * (10 ** singularAssetPositionsForSymbol.decimals))
+                    / Math.subtractFlooredAtOne(assetQuote.price, 1)
             });
         }
 

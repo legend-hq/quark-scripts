@@ -262,7 +262,7 @@ contract QuarkBuilderMorphoClaimRewardsTest is Test, QuarkBuilderTest {
                 0,
                 "IMPOSSIBLE_TO_CONSTRUCT",
                 "USDC",
-                200e6
+                200.000002e6
             )
         );
         builder.morphoClaimRewards(
