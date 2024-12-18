@@ -619,7 +619,14 @@ enum TokenAmount: Equatable, Sendable {
     case max(Token)
 
     static func == (lhs: TokenAmount, rhs: TokenAmount) -> Bool {
-        return lhs.amount == rhs.amount && lhs.token == rhs.token
+        switch (lhs, rhs) {
+            case (let .max(lt), let .max(rt)):
+                return lt == rt
+            case (let .specifiedAmount(la, lt), let .specifiedAmount(ra, rt)):
+                return la == ra && lt == rt
+            default:
+                return false
+        }
     }
 
     static func amt(_ amount: Float, _ token: Token) -> TokenAmount {
