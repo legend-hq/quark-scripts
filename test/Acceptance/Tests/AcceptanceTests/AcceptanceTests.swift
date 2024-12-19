@@ -49,7 +49,7 @@ let allTests: [AcceptanceTest] = [
                 0,
                 "UNABLE_TO_CONSTRUCT",
                 Token.usdc.symbol,
-                toWei(tokenAmount: TokenAmount.amt(0.04, .usdc))
+                TokenAmount.amt(0.04, .usdc).amount
             )
         )
     ),
@@ -66,10 +66,10 @@ let allTests: [AcceptanceTest] = [
             .unableToConstructActionIntent(
                 true,
                 Token.usdc.symbol,
-                toWei(tokenAmount: TokenAmount.amt(1.5, .usdc)),
+                TokenAmount.amt(1.5, .usdc).amount,
                 "UNABLE_TO_CONSTRUCT",
                 Token.usdc.symbol,
-                toWei(tokenAmount: TokenAmount.amt(0.06, .usdc))
+                TokenAmount.amt(0.06, .usdc).amount
             )
         )
     ),
@@ -86,10 +86,10 @@ let allTests: [AcceptanceTest] = [
             .unableToConstructActionIntent(
                 true,
                 Token.usdc.symbol,
-                toWei(tokenAmount: TokenAmount.amt(1.5, .usdc)),
+                TokenAmount.amt(1.5, .usdc).amount,
                 "UNABLE_TO_CONSTRUCT",
                 Token.usdc.symbol,
-                toWei(tokenAmount: TokenAmount.amt(0.06, .usdc))
+                TokenAmount.amt(0.06, .usdc).amount
             )
         )
     ),
@@ -156,7 +156,7 @@ let allTests: [AcceptanceTest] = [
             .single(
                 .multicall([
                     .supplyToComet(tokenAmount: .amt(0.5, .weth), market: .cusdcv3, network: .ethereum),
-                    .quotePay(payment: .amt(0.000025000001, .weth), payee: .stax, quote: .basic),
+                    .quotePay(payment: .amt(0.000025000000000062, .weth), payee: .stax, quote: .basic),
                 ])
             )
         )
@@ -176,7 +176,7 @@ let allTests: [AcceptanceTest] = [
             .single(
                 .multicall([
                     .supplyToComet(tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
-                    .quotePay(payment: .amt(0.000025000001, .eth), payee: .stax, quote: .basic),
+                    .quotePay(payment: .amt(0.000025, .eth), payee: .stax, quote: .basic),
                 ])
             )
         ),
@@ -196,11 +196,106 @@ let allTests: [AcceptanceTest] = [
         expect: .revert(
             .badInputInsufficientFunds(
                 Token.usdc.symbol,
-                toWei(tokenAmount: .amt(50, .usdc)),
-                toWei(tokenAmount: .amt(0, .usdc))
+                TokenAmount.amt(50, .usdc).amount,
+                TokenAmount.amt(0, .usdc).amount
             )
         )
     ),
+    .init(
+        name: "Alice supplies, but does not allow enough for quote pay (testCometSupplyInsufficientFunds)",
+        given: [ .quote(.basic) ],
+        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(2, .usdc), on: .ethereum),
+        expect: .revert(
+            .badInputInsufficientFunds(
+                Token.usdc.symbol,
+                TokenAmount.amt(2, .usdc).amount,
+                TokenAmount.amt(0, .usdc).amount
+            )
+        )
+    ),
+    .init(
+        name: "Alice supplies, but cannot cover operation cost (testCometSupplyMaxCostTooHigh)",
+        given: [
+            .tokenBalance(.alice, .amt(1.0, .usdc), .ethereum),
+            .tokenBalance(.alice, .amt(1.0, .usdc), .base),
+            .quote(
+                .custom(
+                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    prices: [Token.usdc: 1.0],
+                    fees: [
+                        Network.ethereum: 1000,
+                        Network.base: 0.03
+                    ]
+                )
+            )
+        ],
+        when: .payWith(
+            currency: .usdc,
+            .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum)
+        ),
+        expect: .revert(
+            .unableToConstructActionIntent(
+                false,
+                "",
+                0,
+                "IMPOSSIBLE_TO_CONSTRUCT",
+                Token.usdc.symbol,
+                TokenAmount.amt(1000.03001, .usdc).amount
+            )
+        )
+    ),
+    .init(
+        name: "Alice supplies to Comet (testSimpleCometSupply)",
+        given: [
+            .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
+            .tokenBalance(.alice, .amt(1.5, .usdc), .base),
+            .quote(.basic)
+        ],
+        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum),
+        expect: .success(
+            .single(
+                .multicall([
+                    .supplyToComet(tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
+                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+                ])
+            )
+        )
+    ),
+    .init(
+        name: "Alice supplies max to Comet (testSimpleCometSupplyMax)",
+        given: [
+            .tokenBalance(.alice, .amt(3, .usdc), .ethereum),
+            .quote(.basic)
+        ],
+        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .max(.usdc), on: .ethereum),
+        expect: .success(
+            .single(
+                .multicall([
+                    .supplyToComet(tokenAmount: .amt(2.9, .usdc), market: .cusdcv3, network: .ethereum),
+                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+                ])
+            )
+
+        )
+    ),
+    .init(
+        name: "Alice supplies to Comet, paying via Quote Pay (testCometSupplyWithQuotePay)",
+        given: [
+            .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
+            .tokenBalance(.alice, .amt(1.5, .usdc), .base),
+            .quote(.basic)
+        ],
+        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum),
+        expect: .success(
+            .single(
+                .multicall([
+                    .supplyToComet(tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
+                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+                ])
+            )
+
+        )
+    )
 ]
 
 let tests = allTests.filter { !$0.skip }
@@ -482,11 +577,11 @@ enum Comet: Hashable, Equatable {
 
 enum Quote: Hashable, Equatable {
     case basic
-    case custom(quoteId: Hex, prices: [Token: Float], fees: [Network: Float])
+    case custom(quoteId: Hex, prices: [Token: Double], fees: [Network: Double])
 
     static let knownCases: [Quote] = [.basic]
 
-    var params: (quoteId: Hex, prices: [Token: Float], fees: [Network: Float]) {
+    var params: (quoteId: Hex, prices: [Token: Double], fees: [Network: Double]) {
         switch self {
         case let .custom(quoteId, prices, fees):
             return (quoteId, prices, fees)
@@ -507,11 +602,11 @@ enum Quote: Hashable, Equatable {
         }
     }
 
-    var prices: [Token: Float] {
+    var prices: [Token: Double] {
         params.prices
     }
 
-    var fees: [Network: Float] {
+    var fees: [Network: Double] {
         params.fees
     }
 
@@ -519,7 +614,7 @@ enum Quote: Hashable, Equatable {
         params.quoteId
     }
 
-    static func findQuote(quoteId: Hex, prices: [Token: Float], fees: [Network: Float]) -> Quote {
+    static func findQuote(quoteId: Hex, prices: [Token: Double], fees: [Network: Double]) -> Quote {
         for knownCase in Quote.knownCases {
             if knownCase.params.quoteId == quoteId {
                 return knownCase
@@ -574,7 +669,7 @@ enum Token: Hashable, Equatable {
         -> TokenAmount
     {
         let token = Token.from(network: network, address: address)
-        return TokenAmount(amount: Float(amount) / pow(10, Float(token.decimals)), token: token)
+        return TokenAmount.amt(Double(amount) / pow(10, Double(token.decimals)), token)
     }
 
     func hash(into hasher: inout Hasher) {
@@ -605,7 +700,7 @@ enum Token: Hashable, Equatable {
         }
     }
 
-    var defaultUsdPrice: Float {
+    var defaultUsdPrice: Double {
         switch self {
         case .usdc:
             return 1.0
@@ -629,21 +724,41 @@ enum Token: Hashable, Equatable {
     }
 }
 
+extension BigUInt {
+    static let max = BigUInt(1) << 256 - 1
+}
+
 struct TokenAmount: Equatable {
-    let amount: Float
+    let amount: BigUInt
     let token: Token
+
+    init(fromAmount amount: Double, ofToken token: Token) {
+        self.amount = BigUInt(amount * pow(10, Double(token.decimals)))
+        self.token = token
+    }
+
+    init(fromWei amount: BigUInt, ofToken token: Token) {
+        self.amount = amount
+        self.token = token
+    }
 
     static func == (lhs: TokenAmount, rhs: TokenAmount) -> Bool {
         return lhs.amount == rhs.amount && lhs.token == rhs.token
     }
 
-    static func amt(_ amount: Float, _ token: Token) -> TokenAmount {
-        return TokenAmount(amount: amount, token: token)
+    static func amt(_ amount: Double, _ token: Token) -> TokenAmount {
+        return TokenAmount(
+            fromAmount: amount,
+            ofToken: token
+        )
     }
-}
 
-func toWei(tokenAmount: TokenAmount) -> BigUInt {
-    return BigUInt(tokenAmount.amount * pow(10, Float(tokenAmount.token.decimals)))
+    static func max(_ token: Token) -> TokenAmount {
+        return TokenAmount(
+            fromWei: BigUInt.max,
+            ofToken: token
+        )
+    }
 }
 
 enum Given {
@@ -726,11 +841,11 @@ final class AcceptanceTest: CustomTestArgumentEncodable, CustomStringConvertible
 
 class Context {
     let sender: Account
-    var prices: [Token: Float]
-    var fees: [Network: Float]
+    var prices: [Token: Double]
+    var fees: [Network: Double]
     var paymentToken: Token?
-    var tokenPositions: [Network: [Token: [Account: Float]]]
-    var cometPositions: [Network: [Comet: [Account: (Float, Float, [Token: Float])]]]
+    var tokenPositions: [Network: [Token: [Account: BigUInt]]]
+    var cometPositions: [Network: [Comet: [Account: (BigUInt, BigUInt, [Token: BigUInt])]]]
     var ffis: EVM.FFIMap = [:]
 
     let allNetworks: [Network] = [.ethereum, .base, .arbitrum]
@@ -768,14 +883,14 @@ class Context {
         switch given {
         case let .tokenBalance(account, amount, network):
             let currentPosition =
-                tokenPositions[network, default: [:]][amount.token, default: [:]][account] ?? 0.0
+                tokenPositions[network, default: [:]][amount.token, default: [:]][account] ?? 0
             tokenPositions[network, default: [:]][amount.token, default: [:]][account] =
                 currentPosition + amount.amount
         case let .cometSupply(account, amount, comet, network):
             if amount.token == comet.baseAsset {
                 let (currSupply, currBorrow, collaterals) =
                     cometPositions[network, default: [:]][comet, default: [:]][account] ?? (
-                        0.0, 0.0, [:]
+                        0, 0, [:]
                     )
                 cometPositions[network, default: [:]][comet, default: [:]][account] = (
                     currSupply + amount.amount, currBorrow, collaterals
@@ -783,10 +898,10 @@ class Context {
             } else {
                 let (currSupply, currBorrow, collaterals) =
                     cometPositions[network, default: [:]][comet, default: [:]][account] ?? (
-                        0.0, 0.0, [:]
+                        0, 0, [:]
                     )
                 var updatedCollaterals = collaterals
-                updatedCollaterals[amount.token, default: 0.0] += amount.amount
+                updatedCollaterals[amount.token, default: 0] += amount.amount
                 cometPositions[network, default: [:]][comet, default: [:]][account] = (
                     currSupply, currBorrow, updatedCollaterals
                 )
@@ -795,7 +910,7 @@ class Context {
             if amount.token == comet.baseAsset {
                 let (currSupply, currBorrow, collaterals) =
                     cometPositions[network, default: [:]][comet, default: [:]][account] ?? (
-                        0.0, 0.0, [:]
+                        0, 0, [:]
                     )
                 cometPositions[network, default: [:]][comet, default: [:]][account] = (
                     currSupply, currBorrow + amount.amount, collaterals
@@ -810,7 +925,7 @@ class Context {
             ffis[EthAddress("0x0000000000000000000000000000000000FF1010")] = { _ in
                 return .ok(
                     ABI.Value.tuple2(
-                        .uint256(toWei(tokenAmount: gasFee)), .uint256(BigUInt(feePct * 1e18))
+                        .uint256(gasFee.amount), .uint256(BigUInt(feePct * 1e18))
                     ).encoded)
             }
         }
@@ -840,7 +955,7 @@ class Context {
         case let .cometSupply(from, market, amount, network):
             return try await QuarkBuilder.cometSupply(
                 cometSupplyIntent: .init(
-                    amount: toWei(tokenAmount: amount),
+                    amount: amount.amount,
                     assetSymbol: amount.token.symbol,
                     blockTimestamp: 0,
                     chainId: BigUInt(network.chainId),
@@ -866,7 +981,7 @@ class Context {
                 transferIntent: .init(
                     chainId: BigUInt(network.chainId),
                     assetSymbol: amount.token.symbol,
-                    amount: toWei(tokenAmount: amount),
+                    amount: amount.amount,
                     sender: from.address,
                     recipient: to.address,
                     blockTimestamp: BigUInt(1_000_000),
@@ -904,10 +1019,10 @@ class Context {
                 usdPrice: BigUInt(token.defaultUsdPrice),
                 accountBalances: Account.knownCases.map { account in
                     let amount =
-                        tokenPositions[network, default: [:]][token, default: [:]][account] ?? 0.0
+                        tokenPositions[network, default: [:]][token, default: [:]][account] ?? 0
                     return QuarkBuilder.Accounts.AccountBalance(
                         account: account.address,
-                        balance: BigUInt(amount * pow(10, Float(token.decimals)))
+                        balance: amount
                     )
                 }
             )
@@ -916,7 +1031,7 @@ class Context {
 
     func reifyCometPositions(network: Network) -> [QuarkBuilder.Accounts.CometPositions] {
         (cometPositions[network] ?? [:]).map { comet, accountPositions in
-            var collateralPositions: [Token: [Account: Float]] = [:]
+            var collateralPositions: [Token: [Account: BigUInt]] = [:]
             for (account, position) in accountPositions {
                 for (token, amount) in position.2 {
                     collateralPositions[token, default: [:]][account] = amount
@@ -928,20 +1043,14 @@ class Context {
                 basePosition: QuarkBuilder.Accounts.CometBasePosition(
                     asset: comet.baseAsset.address(network: network),
                     accounts: accountPositions.map { account, _ in account.address },
-                    borrowed: accountPositions.map { _, position in
-                        toWei(tokenAmount: TokenAmount(amount: position.1, token: comet.baseAsset))
-                    },
-                    supplied: accountPositions.map { _, position in
-                        toWei(tokenAmount: TokenAmount(amount: position.0, token: comet.baseAsset))
-                    }
+                    borrowed: accountPositions.map { _, position in position.1 },
+                    supplied: accountPositions.map { _, position in position.0 }
                 ),
                 collateralPositions: collateralPositions.map { token, accountAmounts in
                     QuarkBuilder.Accounts.CometCollateralPosition(
                         asset: token.address(network: network),
                         accounts: accountAmounts.map { account, amount in account.address },
-                        balances: accountAmounts.map { account, amount in
-                            toWei(tokenAmount: TokenAmount(amount: amount, token: token))
-                        }
+                        balances: accountAmounts.map { _, amount in amount }
                     )
                 }
             )
