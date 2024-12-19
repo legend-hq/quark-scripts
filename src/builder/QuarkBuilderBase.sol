@@ -22,7 +22,7 @@ import {List} from "src/builder/List.sol";
 import {HashMap} from "src/builder/HashMap.sol";
 import {QuotePay} from "src/QuotePay.sol";
 
-string constant QUARK_BUILDER_VERSION = "0.5.2";
+string constant QUARK_BUILDER_VERSION = "0.5.3";
 
 contract QuarkBuilderBase {
     /* ===== Output Types ===== */
