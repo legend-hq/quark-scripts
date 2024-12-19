@@ -1043,14 +1043,14 @@ class Context {
                 basePosition: QuarkBuilder.Accounts.CometBasePosition(
                     asset: comet.baseAsset.address(network: network),
                     accounts: accountPositions.map { account, _ in account.address },
-                    borrowed: accountPositions.map { _, position in TokenAmount.init(fromWei: position.1, ofToken: comet.baseAsset).amount },
-                    supplied: accountPositions.map { _, position in TokenAmount.init(fromWei: position.0, ofToken: comet.baseAsset).amount }
+                    borrowed: accountPositions.map { _, position in position.1 },
+                    supplied: accountPositions.map { _, position in position.0 }
                 ),
                 collateralPositions: collateralPositions.map { token, accountAmounts in
                     QuarkBuilder.Accounts.CometCollateralPosition(
                         asset: token.address(network: network),
                         accounts: accountAmounts.map { account, amount in account.address },
-                        balances: accountAmounts.map { account, amount in TokenAmount.init(fromWei: amount, ofToken: token).amount }
+                        balances: accountAmounts.map { _, amount in amount }
                     )
                 }
             )
