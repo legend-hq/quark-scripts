@@ -36,10 +36,9 @@ library Quotes {
     ) internal pure returns (PaymentInfo.Payment memory) {
         if (Strings.stringEqIgnoreCase(symbol, "USD")) {
             return PaymentInfo.Payment({
-                isToken: false,
                 currency: symbol,
                 quoteId: quote.quoteId,
-                maxCosts: new PaymentInfo.PaymentMaxCost[](0)
+                chainCosts: new PaymentInfo.ChainCost[](0)
             });
         }
 
@@ -57,8 +56,7 @@ library Quotes {
             revert NoKnownAssetQuote(symbol);
         }
 
-        PaymentInfo.PaymentMaxCost[] memory paymentMaxCosts =
-            new PaymentInfo.PaymentMaxCost[](quote.networkOperationFees.length);
+        PaymentInfo.ChainCost[] memory chainCosts = new PaymentInfo.ChainCost[](quote.networkOperationFees.length);
 
         for (uint256 i = 0; i < quote.networkOperationFees.length; ++i) {
             NetworkOperationFee memory networkOperationFee = quote.networkOperationFees[i];
@@ -69,12 +67,12 @@ library Quotes {
             Accounts.AssetPositions memory singularAssetPositionsForSymbol =
                 Accounts.findAssetPositions(symbol, chainAccountListByChainId.assetPositionsList);
 
-            paymentMaxCosts[i] = PaymentInfo.PaymentMaxCost({
+            chainCosts[i] = PaymentInfo.ChainCost({
                 chainId: networkOperationFee.chainId,
                 amount: (networkOperationFee.price * (10 ** singularAssetPositionsForSymbol.decimals)) / assetQuote.price
             });
         }
 
-        return PaymentInfo.Payment({isToken: true, currency: symbol, quoteId: quote.quoteId, maxCosts: paymentMaxCosts});
+        return PaymentInfo.Payment({currency: symbol, quoteId: quote.quoteId, chainCosts: chainCosts});
     }
 }
