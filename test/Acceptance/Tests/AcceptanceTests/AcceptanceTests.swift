@@ -156,7 +156,7 @@ let allTests: [AcceptanceTest] = [
             .single(
                 .multicall([
                     .supplyToComet(tokenAmount: .amt(0.5, .weth), market: .cusdcv3, network: .ethereum),
-                    .quotePay(payment: .amt(0.000025000001, .weth), payee: .stax, quote: .basic),
+                    .quotePay(payment: .amt(0.000025, .weth), payee: .stax, quote: .basic),
                 ])
             )
         )
@@ -176,7 +176,7 @@ let allTests: [AcceptanceTest] = [
             .single(
                 .multicall([
                     .supplyToComet(tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
-                    .quotePay(payment: .amt(0.000025000001, .eth), payee: .stax, quote: .basic),
+                    .quotePay(payment: .amt(0.000025, .eth), payee: .stax, quote: .basic),
                 ])
             )
         ),
@@ -213,38 +213,37 @@ let allTests: [AcceptanceTest] = [
             )
         )
     ),
-    // XXX generates inaccurate fee
-    // .init(
-    //     name: "Alice supplies, but cannot cover operation cost (testCometSupplyMaxCostTooHigh)",
-    //     given: [
-    //         .tokenBalance(.alice, .amt(1.0, .usdc), .ethereum),
-    //         .tokenBalance(.alice, .amt(1.0, .usdc), .base),
-    //         .quote(
-    //             .custom(
-    //                 quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
-    //                 prices: [Token.usdc: 1.0],
-    //                 fees: [
-    //                     Network.ethereum: 1000,
-    //                     Network.base: 0.03
-    //                 ]
-    //             )
-    //         )
-    //     ],
-    //     when: .payWith(
-    //         currency: .usdc,
-    //         .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum)
-    //     ),
-    //     expect: .revert(
-    //         .unableToConstructActionIntent(
-    //             false,
-    //             "",
-    //             0,
-    //             "IMPOSSIBLE_TO_CONSTRUCT",
-    //             Token.usdc.symbol,
-    //             TokenAmount(fromWei: 1_000_030_000, ofToken: .usdc).amount
-    //         )
-    //     )
-    // ),
+    .init(
+        name: "Alice supplies, but cannot cover operation cost (testCometSupplyMaxCostTooHigh)",
+        given: [
+            .tokenBalance(.alice, .amt(1.0, .usdc), .ethereum),
+            .tokenBalance(.alice, .amt(1.0, .usdc), .base),
+            .quote(
+                .custom(
+                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    prices: [Token.usdc: 1.0],
+                    fees: [
+                        Network.ethereum: 1000,
+                        Network.base: 0.03
+                    ]
+                )
+            )
+        ],
+        when: .payWith(
+            currency: .usdc,
+            .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum)
+        ),
+        expect: .revert(
+            .unableToConstructActionIntent(
+                false,
+                "",
+                0,
+                "IMPOSSIBLE_TO_CONSTRUCT",
+                Token.usdc.symbol,
+                TokenAmount.amt(1000.03, .usdc).amount
+            )
+        )
+    ),
     .init(
         name: "Alice supplies to Comet (testSimpleCometSupply)",
         given: [
@@ -578,11 +577,11 @@ enum Comet: Hashable, Equatable {
 
 enum Quote: Hashable, Equatable {
     case basic
-    case custom(quoteId: Hex, prices: [Token: Float], fees: [Network: Float])
+    case custom(quoteId: Hex, prices: [Token: Double], fees: [Network: Double])
 
     static let knownCases: [Quote] = [.basic]
 
-    var params: (quoteId: Hex, prices: [Token: Float], fees: [Network: Float]) {
+    var params: (quoteId: Hex, prices: [Token: Double], fees: [Network: Double]) {
         switch self {
         case let .custom(quoteId, prices, fees):
             return (quoteId, prices, fees)
@@ -603,11 +602,11 @@ enum Quote: Hashable, Equatable {
         }
     }
 
-    var prices: [Token: Float] {
+    var prices: [Token: Double] {
         params.prices
     }
 
-    var fees: [Network: Float] {
+    var fees: [Network: Double] {
         params.fees
     }
 
@@ -615,7 +614,7 @@ enum Quote: Hashable, Equatable {
         params.quoteId
     }
 
-    static func findQuote(quoteId: Hex, prices: [Token: Float], fees: [Network: Float]) -> Quote {
+    static func findQuote(quoteId: Hex, prices: [Token: Double], fees: [Network: Double]) -> Quote {
         for knownCase in Quote.knownCases {
             if knownCase.params.quoteId == quoteId {
                 return knownCase
@@ -670,7 +669,7 @@ enum Token: Hashable, Equatable {
         -> TokenAmount
     {
         let token = Token.from(network: network, address: address)
-        return TokenAmount.amt(Float(amount) / pow(10, Float(token.decimals)), token)
+        return TokenAmount.amt(Double(amount) / pow(10, Double(token.decimals)), token)
     }
 
     func hash(into hasher: inout Hasher) {
@@ -701,7 +700,7 @@ enum Token: Hashable, Equatable {
         }
     }
 
-    var defaultUsdPrice: Float {
+    var defaultUsdPrice: Double {
         switch self {
         case .usdc:
             return 1.0
@@ -733,8 +732,8 @@ struct TokenAmount: Equatable {
     let amount: BigUInt
     let token: Token
 
-    init(fromAmount amount: Float, ofToken token: Token) {
-        self.amount = BigUInt(amount * pow(10, Float(token.decimals)))
+    init(fromAmount amount: Double, ofToken token: Token) {
+        self.amount = BigUInt(amount * pow(10, Double(token.decimals)))
         self.token = token
     }
 
@@ -747,7 +746,7 @@ struct TokenAmount: Equatable {
         return lhs.amount == rhs.amount && lhs.token == rhs.token
     }
 
-    static func amt(_ amount: Float, _ token: Token) -> TokenAmount {
+    static func amt(_ amount: Double, _ token: Token) -> TokenAmount {
         return TokenAmount(
             fromAmount: amount,
             ofToken: token
@@ -842,8 +841,8 @@ final class AcceptanceTest: CustomTestArgumentEncodable, CustomStringConvertible
 
 class Context {
     let sender: Account
-    var prices: [Token: Float]
-    var fees: [Network: Float]
+    var prices: [Token: Double]
+    var fees: [Network: Double]
     var paymentToken: Token?
     var tokenPositions: [Network: [Token: [Account: BigUInt]]]
     var cometPositions: [Network: [Comet: [Account: (BigUInt, BigUInt, [Token: BigUInt])]]]
