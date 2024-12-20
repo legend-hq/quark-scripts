@@ -330,6 +330,45 @@ let allTests: [AcceptanceTest] = [
 
         )
     ),
+
+    // CometRepay tests
+    // function testCometRepayInvalidInput() public {
+    // function testCometRepayFundsUnavailable() public {
+    // function testCometRepayNotEnoughPaymentToken() public {
+    // function testCometRepayWithAutoWrapper() public {
+    // function testCometRepayPayFromWithdraw() public {
+    // function testCometRepayWithBridge() public {
+    // function testCometRepayMaxWithQuotePay() public {
+    // function testCometRepayMaxWithBridge() public {
+
+    .init(
+        name: "testCometRepay",
+        given: [
+            .tokenBalance(.alice, .amt(2, .usdc), .ethereum),
+            .cometSupply(.alice, .amt(1, .link), .cusdcv3, .ethereum),
+            .quote(.basic)
+        ],
+        when: .cometRepay(
+            from: .alice,
+            market: .cusdcv3,
+            repayAmount: .amt(1, .usdc),
+            collateralAmounts: [.amt(1, .link)],
+            on: .ethereum
+        ),
+        expect: .success(
+            .single(
+                .multicall([
+                    .repayAndWithdrawMultipleAssetsFromComet(
+                        repayAmount: .amt(1, .usdc),
+                        collateralAmounts: [.amt(1, .link)],
+                        market: .cusdcv3,
+                        network: .ethereum
+                    ),
+                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+                ])
+            )
+        )
+    )
 ]
 
 let tests = allTests.filter { !$0.skip }
@@ -340,6 +379,12 @@ enum Call: CustomStringConvertible, Equatable {
         bridge: String, srcNetwork: Network, destinationNetwork: Network, tokenAmount: TokenAmount)
     case transferErc20(tokenAmount: TokenAmount, recipient: Account)
     case supplyToComet(tokenAmount: TokenAmount, market: Comet, network: Network)
+    case repayAndWithdrawMultipleAssetsFromComet(
+        repayAmount: TokenAmount,
+        collateralAmounts: [TokenAmount],
+        market: Comet,
+        network: Network
+    )
     case quotePay(payment: TokenAmount, payee: Account, quote: Quote)
     case multicall(_ calls: [Call])
     case unknownFunctionCall(String, String, ABI.Value)
@@ -438,6 +483,26 @@ enum Call: CustomStringConvertible, Equatable {
             }
         }
 
+        if scriptAddress == getScriptAddress(CometRepayAndWithdrawMultipleAssets.creationCode) {
+            if let (comet, assets, amounts, baseAsset, repayAmount) = try? CometRepayAndWithdrawMultipleAssets.runDecode(input: calldata) {
+
+                let collateralAmounts = zip(amounts, assets).map {
+                    Token.getTokenAmount(
+                        amount: $0,
+                        network: network,
+                        address: $1
+                    )
+                }
+
+                return repayAndWithdrawMultipleAssetsFromComet(
+                    repayAmount: Token.getTokenAmount(amount: repayAmount, network: network, address: baseAsset),
+                    collateralAmounts: collateralAmounts,
+                    market: Comet.from(network: network, address: comet),
+                    network: network
+                )
+            }
+        }
+
         for (name, creationCode, functions) in Call.allFunctions {
             if scriptAddress == getScriptAddress(creationCode) {
                 for function in functions {
@@ -464,6 +529,16 @@ enum Call: CustomStringConvertible, Equatable {
         case let .supplyToComet(tokenAmount, market, network):
             return
                 "supplyToComet(\(tokenAmount.amount) \(tokenAmount.token.symbol) to \(market.description) on \(network.description))"
+        case let .repayAndWithdrawMultipleAssetsFromComet(
+            repayAmount,
+            collateralAmounts,
+            market,
+            network
+        ):
+            let withdrawString = collateralAmounts.map {collateralAmount in
+                "\(collateralAmount.amount) \(collateralAmount.token.symbol)"
+            }.joined(separator: ",")
+            return "repayAndWithdrawMultipleAssetsFromComet(repay \(repayAmount.amount) \(repayAmount.token.symbol), withdraw [\(withdrawString)]  to \(market.description) on \(network.description))"
         case let .multicall(calls):
             return "multicall(\(calls.map { $0.description }.joined(separator: ", ")))"
         case let .unknownFunctionCall(name, function, value):
@@ -718,6 +793,8 @@ enum Token: Hashable, Equatable {
             return "ETH"
         case .weth:
             return "WETH"
+        case .link:
+            return "LINK"
         case let .unknownToken(address):
             return "UnknownToken(\(address.description))"
         }
@@ -727,7 +804,7 @@ enum Token: Hashable, Equatable {
         switch self {
         case .usdc:
             return 6
-        case .eth, .weth:
+        case .eth, .weth, .link:
             return 18
         case .unknownToken:
             return 0
@@ -740,6 +817,8 @@ enum Token: Hashable, Equatable {
             return 1.0
         case .eth, .weth:
             return 4000.0
+        case .link:
+            return 25.0
         case .unknownToken:
             return 0
         }
@@ -806,6 +885,7 @@ enum Given {
 indirect enum When {
     case transfer(from: Account, to: Account, amount: TokenAmount, on: Network)
     case cometSupply(from: Account, market: Comet, amount: TokenAmount, on: Network)
+    case cometRepay(from: Account, market: Comet, repayAmount: TokenAmount, collateralAmounts: [TokenAmount], on: Network)
     case payWith(currency: Token, When)
 
     var sender: Account {
@@ -813,6 +893,8 @@ indirect enum When {
         case let .transfer(from, _, _, _):
             return from
         case let .cometSupply(from, _, _, _):
+            return from
+        case let .cometRepay(from, _, _, _, _):
             return from
         case let .payWith(_, intent):
             return intent.sender
@@ -985,6 +1067,36 @@ class Context {
         case let .payWith(token, intent):
             paymentToken = token
             return try await self.when(intent)
+
+        case let .cometRepay(from, market, repayAmount, collateralAmounts, network):
+            return try await QuarkBuilder.cometRepay(
+                repayIntent: .init(
+                    amount: repayAmount.amount,
+                    assetSymbol: repayAmount.token.symbol,
+                    blockTimestamp: 0,
+                    chainId: BigUInt(network.chainId),
+                    collateralAmounts: collateralAmounts.map {
+                        $0.amount
+                    },
+                    collateralAssetSymbols: collateralAmounts.map {
+                        $0.token.symbol
+                    },
+                    comet: market.address(network: network),
+                    repayer: from.address,
+                    preferAcross: true,
+                    paymentAssetSymbol: paymentToken?.symbol ?? when.paymentAssetSymbol
+                ),
+                chainAccountsList: chainAccounts,
+                quote: .init(
+                    quoteId: Hex(
+                        "0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    issuedAt: 0,
+                    expiresAt: BigUInt(Date(timeIntervalSinceNow: 1_000_000).timeIntervalSince1970),
+                    assetQuotes: assetQuotes,
+                    networkOperationFees: networkOperationFees
+                ),
+                withFunctions: ffis
+            )
 
         case let .cometSupply(from, market, amount, network):
             return try await QuarkBuilder.cometSupply(
