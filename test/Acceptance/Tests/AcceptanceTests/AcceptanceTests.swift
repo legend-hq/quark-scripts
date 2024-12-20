@@ -411,36 +411,36 @@ let allTests: [AcceptanceTest] = [
             )
         )
     ),
-    // no wrapper actions yet
-    // .init(
-    //     name: "testCometRepayWithAutoWrapper",
-    //     given: [
-    //         .tokenBalance(.alice, .amt(1, .usdc), .ethereum),
-    //         .tokenBalance(.alice, .amt(1, .eth), .ethereum),
-    //         .quote(.basic)
-    //     ],
-    //     when: .cometRepay(
-    //         from: .alice,
-    //         market: .cwethv3,
-    //         repayAmount: .amt(1, .weth),
-    //         collateralAmounts: [.amt(1, .link)],
-    //         on: .ethereum
-    //     ),
-    //     expect: .success(
-    //         .single(
-    //             .multicall([
-    //                 .repayAndWithdrawMultipleAssetsFromComet(
-    //                     repayAmount: .amt(1, .usdc),
-    //                     collateralAmounts: [.amt(1, .link)],
-    //                     market: .cusdcv3,
-    //                     network: .ethereum
-    //                 ),
-    //                 .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-    //             ])
-    //         )
-    //     ),
-    //     only: true
-    // )
+    .init(
+        name: "testCometRepayWithAutoWrapper",
+        given: [
+            .tokenBalance(.alice, .amt(1, .usdc), .ethereum),
+            .tokenBalance(.alice, .amt(1, .eth), .ethereum),
+            .quote(.basic)
+        ],
+        when: .cometRepay(
+            from: .alice,
+            market: .cwethv3,
+            repayAmount: .amt(1, .weth),
+            collateralAmounts: [.amt(1, .link)],
+            on: .ethereum
+        ),
+        expect: .success(
+            .single(
+                .multicall([
+                    .wrapAsset(.eth),
+                    .repayAndWithdrawMultipleAssetsFromComet(
+                        repayAmount: .amt(1, .weth),
+                        collateralAmounts: [.amt(1, .link)],
+                        market: .cwethv3,
+                        network: .ethereum
+                    ),
+                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+                ])
+            )
+        ),
+        only: true
+    ),
     .init(
         name: "testCometRepayPayFromWithdraw",
         given: [
@@ -577,6 +577,7 @@ enum Call: CustomStringConvertible, Equatable {
     )
     case quotePay(payment: TokenAmount, payee: Account, quote: Quote)
     case multicall(_ calls: [Call])
+    case wrapAsset(_ token: Token)
     case unknownFunctionCall(String, String, ABI.Value)
     case unknownScriptCall(EthAddress, Hex)
 
@@ -585,6 +586,7 @@ enum Call: CustomStringConvertible, Equatable {
         ("TransferActions", TransferActions.creationCode, TransferActions.functions),
         ("Multicall", Multicall.creationCode, Multicall.functions),
         ("QuotePay", QuotePay.creationCode, QuotePay.functions),
+        ("WrapperActions", WrapperActions.creationCode, WrapperActions.functions)
     ]
 
     static func tryDecodeCall(scriptAddress: EthAddress, calldata: Hex, network: Network) -> Call {
@@ -693,6 +695,12 @@ enum Call: CustomStringConvertible, Equatable {
             }
         }
 
+        if scriptAddress == getScriptAddress(WrapperActions.creationCode) {
+            if let (_) = try? WrapperActions.wrapAllETHDecode(input: calldata) {
+                return .wrapAsset(.eth)
+            }
+        }
+
         for (name, creationCode, functions) in Call.allFunctions {
             if scriptAddress == getScriptAddress(creationCode) {
                 for function in functions {
@@ -731,6 +739,8 @@ enum Call: CustomStringConvertible, Equatable {
             return "repayAndWithdrawMultipleAssetsFromComet(repay \(repayAmount.amount) \(repayAmount.token.symbol), withdraw [\(withdrawString)]  to \(market.description) on \(network.description))"
         case let .multicall(calls):
             return "multicall(\(calls.map { $0.description }.joined(separator: ", ")))"
+        case let .wrapAsset(token):
+            return "wrapAsset(\(token.symbol))"
         case let .unknownFunctionCall(name, function, value):
             return "unknownFunctionCall(\(name), \(function), \(value))"
         case let .unknownScriptCall(scriptSource, calldata):
