@@ -160,11 +160,41 @@ let allTests: [AcceptanceTest] = [
                         bridge: "Across",
                         srcNetwork: .base,
                         destinationNetwork: .arbitrum,
-                        tokenAmount: .amt(49.48, .usdc)
+                        inputTokenAmount: .amt(49.48, .usdc),
+                        outputTokenAmount: .amt(48.00, .usdc)
                     ),
                     .quotePay(payment: .amt(0.06, .usdc), payee: .stax, quote: .basic),
                 ]),
                 .transferErc20(tokenAmount: .amt(98, .usdc), recipient: .bob),
+            ])
+        )
+    ),
+    .init(
+        name: "Alice transfers WETH to Bob on Arbitrum via Across [Pay with WETH]",
+        given: [
+            .tokenBalance(.alice, .amt(0.5, .weth), .base),
+            .quote(.basic),
+            .acrossQuote(.amt(0.01, .weth), 0.01),
+        ],
+        when: .payWith(
+            currency: .weth,
+            .transfer(from: .alice, to: .bob, amount: .amt(0.3, .weth), on: .arbitrum)
+        ),
+        expect: .success(
+            .multi([
+                .multicall([
+                    .bridge(
+                        bridge: "Across",
+                        srcNetwork: .base,
+                        destinationNetwork: .arbitrum,
+                        inputTokenAmount: .amt(0.31299996, .weth),
+                        outputTokenAmount: .amt(0.3, .weth)
+                    ),
+                    // Total quote = 0.02 + 0.04 = 0.06
+                    // Amount in terms of ETH = 0.06 / 4000 = 0.000015
+                    .quotePay(payment: .amt(0.0000150000005, .weth), payee: .stax, quote: .basic),
+                ]),
+                .transferErc20(tokenAmount: .amt(0.3, .weth), recipient: .bob),
             ])
         )
     ),
@@ -337,7 +367,7 @@ let filteredTests = tests.contains { $0.only } ? tests.filter { $0.only } : test
 
 enum Call: CustomStringConvertible, Equatable {
     case bridge(
-        bridge: String, srcNetwork: Network, destinationNetwork: Network, tokenAmount: TokenAmount)
+        bridge: String, srcNetwork: Network, destinationNetwork: Network, inputTokenAmount: TokenAmount, outputTokenAmount: TokenAmount)
     case transferErc20(tokenAmount: TokenAmount, recipient: Account)
     case supplyToComet(tokenAmount: TokenAmount, market: Comet, network: Network)
     case quotePay(payment: TokenAmount, payee: Account, quote: Quote)
@@ -359,9 +389,9 @@ enum Call: CustomStringConvertible, Equatable {
                 _,
                 _,
                 inputToken,
-                _,
+                outputToken,
                 inputAmount,
-                _,
+                outputAmount,
                 destinationChainId,
                 _,
                 _,
@@ -374,10 +404,15 @@ enum Call: CustomStringConvertible, Equatable {
                     bridge: "Across",
                     srcNetwork: network,
                     destinationNetwork: Network.fromChainId(BigInt(destinationChainId)),
-                    tokenAmount: Token.getTokenAmount(
+                    inputTokenAmount: Token.getTokenAmount(
                         amount: inputAmount,
                         network: network,
                         address: inputToken
+                    ),
+                    outputTokenAmount: Token.getTokenAmount(
+                        amount: outputAmount,
+                        network: Network.fromChainId(BigInt(destinationChainId)),
+                        address: outputToken
                     )
                 )
             }
@@ -452,9 +487,9 @@ enum Call: CustomStringConvertible, Equatable {
 
     var description: String {
         switch self {
-        case let .bridge(bridge, chainId, destinationChainId, tokenAmount):
+        case let .bridge(bridge, chainId, destinationChainId, inputTokenAmount, outputTokenAmount):
             return
-                "bridge(\(bridge), \(tokenAmount.amount) \(tokenAmount.token.symbol) from \(chainId.description) to \(destinationChainId.description))"
+                "bridge(\(bridge), \(inputTokenAmount.amount) \(inputTokenAmount.token.symbol) to receive \(outputTokenAmount.amount) \(outputTokenAmount.token.symbol) from \(chainId.description) to \(destinationChainId.description))"
         case let .transferErc20(tokenAmount, recipient):
             return
                 "transferErc20(\(tokenAmount.amount) \(tokenAmount.token.symbol) to \(recipient.description))"
