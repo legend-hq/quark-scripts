@@ -45,7 +45,7 @@ let allTests: [AcceptanceTest] = [
         expect: .revert(
             .unableToConstructActionIntent(
                 false,
-                "",
+                Token.usdc.symbol,
                 0,
                 "UNABLE_TO_CONSTRUCT",
                 Token.usdc.symbol,
@@ -74,6 +74,30 @@ let allTests: [AcceptanceTest] = [
         )
     ),
     .init(
+        name: "Alice transfers MAX USDC (with uint256.max) to Bob on Arbitrum via Bridge",
+        given: [
+            .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),
+            .tokenBalance(.alice, .amt(50, .usdc), .base),
+            .quote(.basic),
+            .acrossQuote(.amt(1, .usdc), 0.01),
+        ],
+        when: .transfer(from: .alice, to: .bob, amount: .max(.usdc), on: .arbitrum),
+        expect: .success(
+            .multi([
+                .bridge(
+                    bridge: "Across",
+                    srcNetwork: .base,
+                    destinationNetwork: .arbitrum,
+                    tokenAmount: .amt(50, .usdc)
+                ),
+                .multicall([
+                    .transferErc20(tokenAmount: .amt(98.44, .usdc), recipient: .bob),
+                    .quotePay(payment: .amt(0.06, .usdc), payee: .stax, quote: .basic),
+                ]),
+            ])
+        )
+    ),
+    .init(
         name: "Alice bridges sumSrcBalance via Across when inputAmount > sumSrcBalance",
         given: [
             .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),
@@ -94,20 +118,22 @@ let allTests: [AcceptanceTest] = [
         )
     ),
     .init(
-        name: "Alice attempts to transfers 75 USDC to Bob on Arbitrum via Bridge but doesn't have all the quotes",
+        name:
+            "Alice attempts to transfers 75 USDC to Bob on Arbitrum via Bridge but doesn't have all the quotes",
         given: [
             .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),
             .tokenBalance(.alice, .amt(50, .usdc), .base),
             .quote(
                 .custom(
-                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    quoteId: Hex(
+                        "0x00000000000000000000000000000000000000000000000000000000000000CC"),
                     prices: Dictionary(
                         uniqueKeysWithValues: Token.knownCases.map { token in
                             (token, token.defaultUsdPrice)
                         }
                     ),
                     fees: [
-                        .arbitrum: 0.04,
+                        .arbitrum: 0.04
                     ]
                 )
             ),
@@ -155,8 +181,10 @@ let allTests: [AcceptanceTest] = [
         expect: .success(
             .single(
                 .multicall([
-                    .supplyToComet(tokenAmount: .amt(0.5, .weth), market: .cusdcv3, network: .ethereum),
-                    .quotePay(payment: .amt(0.000025000000000062, .weth), payee: .stax, quote: .basic),
+                    .supplyToComet(
+                        tokenAmount: .amt(0.5, .weth), market: .cusdcv3, network: .ethereum),
+                    .quotePay(
+                        payment: .amt(0.000025000000000062, .weth), payee: .stax, quote: .basic),
                 ])
             )
         )
@@ -175,7 +203,8 @@ let allTests: [AcceptanceTest] = [
         expect: .success(
             .single(
                 .multicall([
-                    .supplyToComet(tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
+                    .supplyToComet(
+                        tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
                     .quotePay(payment: .amt(0.000025, .eth), payee: .stax, quote: .basic),
                 ])
             )
@@ -202,8 +231,9 @@ let allTests: [AcceptanceTest] = [
         )
     ),
     .init(
-        name: "Alice supplies, but does not allow enough for quote pay (testCometSupplyInsufficientFunds)",
-        given: [ .quote(.basic) ],
+        name:
+            "Alice supplies, but does not allow enough for quote pay (testCometSupplyInsufficientFunds)",
+        given: [.quote(.basic)],
         when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(2, .usdc), on: .ethereum),
         expect: .revert(
             .badInputInsufficientFunds(
@@ -220,14 +250,15 @@ let allTests: [AcceptanceTest] = [
             .tokenBalance(.alice, .amt(1.0, .usdc), .base),
             .quote(
                 .custom(
-                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    quoteId: Hex(
+                        "0x00000000000000000000000000000000000000000000000000000000000000CC"),
                     prices: [Token.usdc: 1.0],
                     fees: [
                         Network.ethereum: 1000,
-                        Network.base: 0.03
+                        Network.base: 0.03,
                     ]
                 )
-            )
+            ),
         ],
         when: .payWith(
             currency: .usdc,
@@ -249,13 +280,14 @@ let allTests: [AcceptanceTest] = [
         given: [
             .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
             .tokenBalance(.alice, .amt(1.5, .usdc), .base),
-            .quote(.basic)
+            .quote(.basic),
         ],
         when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum),
         expect: .success(
             .single(
                 .multicall([
-                    .supplyToComet(tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
+                    .supplyToComet(
+                        tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
                     .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
                 ])
             )
@@ -265,13 +297,14 @@ let allTests: [AcceptanceTest] = [
         name: "Alice supplies max to Comet (testSimpleCometSupplyMax)",
         given: [
             .tokenBalance(.alice, .amt(3, .usdc), .ethereum),
-            .quote(.basic)
+            .quote(.basic),
         ],
         when: .cometSupply(from: .alice, market: .cusdcv3, amount: .max(.usdc), on: .ethereum),
         expect: .success(
             .single(
                 .multicall([
-                    .supplyToComet(tokenAmount: .amt(2.9, .usdc), market: .cusdcv3, network: .ethereum),
+                    .supplyToComet(
+                        tokenAmount: .amt(2.9, .usdc), market: .cusdcv3, network: .ethereum),
                     .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
                 ])
             )
@@ -283,19 +316,20 @@ let allTests: [AcceptanceTest] = [
         given: [
             .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
             .tokenBalance(.alice, .amt(1.5, .usdc), .base),
-            .quote(.basic)
+            .quote(.basic),
         ],
         when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum),
         expect: .success(
             .single(
                 .multicall([
-                    .supplyToComet(tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
+                    .supplyToComet(
+                        tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
                     .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
                 ])
             )
 
         )
-    )
+    ),
 ]
 
 let tests = allTests.filter { !$0.skip }
