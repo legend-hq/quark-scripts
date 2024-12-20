@@ -438,8 +438,7 @@ let allTests: [AcceptanceTest] = [
                     .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
                 ])
             )
-        ),
-        only: true
+        )
     ),
     .init(
         name: "testCometRepayPayFromWithdraw",
@@ -469,96 +468,101 @@ let allTests: [AcceptanceTest] = [
         )
 
     ),
-    // Panic!
-    // .init(
-    //     name: "testCometRepayWithBridge",
-    //     given: [
-    //         .tokenBalance(.alice, .amt(4, .usdc), .ethereum),
-    //         .quote(.basic),
-    //         .acrossQuote(.amt(1, .usdc), 0.01),
-    //     ],
-    //     when: .cometRepay(
-    //         from: .alice,
-    //         market: .cusdcv3,
-    //         repayAmount: .amt(2, .usdc),
-    //         collateralAmounts: [.amt(1, .link)],
-    //         on: .base
-    //     ),
-    //     expect: .success(
-    //         .single(
-    //             .multicall([
-    //                 .repayAndWithdrawMultipleAssetsFromComet(
-    //                     repayAmount: .amt(1, .weth),
-    //                     collateralAmounts: [.amt(1, .usdc)],
-    //                     market: .cwethv3,
-    //                     network: .ethereum
-    //                 ),
-    //                 .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-    //             ])
-    //         )
-    //     ),
-    //     only: true
-    // ),
-    // return uint256max + 1 in QuarkBuilder result
-    // .init(
-    //     name: "testCometRepayMaxWithQuotePay",
-    //     given: [
-    //         .tokenBalance(.alice, .amt(50, .usdc), .ethereum),
-    //         .cometBorrow(.alice, .amt(10, .usdc), .cusdcv3, .ethereum),
-    //         .quote(.basic)
-    //     ],
-    //     when: .cometRepay(
-    //         from: .alice,
-    //         market: .cusdcv3,
-    //         repayAmount: .max(.usdc),
-    //         collateralAmounts: [],
-    //         on: .ethereum
-    //     ),
-    //     expect: .success(
-    //         .single(
-    //             .multicall([
-    //                 .repayAndWithdrawMultipleAssetsFromComet(
-    //                     repayAmount: .max(.usdc),
-    //                     collateralAmounts: [],
-    //                     market: .cusdcv3,
-    //                     network: .ethereum
-    //                 ),
-    //                 .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-    //             ])
-    //         )
-    //     ),
-    //     only: true
-    // ),
-    // testCometRepayMaxWithBridge
-    // noSuchFFI
-    // .init(
-    //     name: "testCometRepayMaxWithBridge",
-    //     given: [
-    //         .tokenBalance(.alice, .amt(50, .usdc), .ethereum),
-    //         .cometBorrow(.alice, .amt(10, .usdc), .cusdcv3, .base),
-    //         .quote(.basic)
-    //     ],
-    //     when: .cometRepay(
-    //         from: .alice,
-    //         market: .cusdcv3,
-    //         repayAmount: .max(.usdc),
-    //         collateralAmounts: [],
-    //         on: .base
-    //     ),
-    //     expect: .success(
-    //         .single(
-    //             .multicall([
-    //                 .repayAndWithdrawMultipleAssetsFromComet(
-    //                     repayAmount: .max(.usdc),
-    //                     collateralAmounts: [],
-    //                     market: .cusdcv3,
-    //                     network: .base
-    //                 ),
-    //                 .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-    //             ])
-    //         )
-    //     )
-    // ),
+    .init(
+        name: "testCometRepayMaxWithQuotePay",
+        given: [
+            .tokenBalance(.alice, .amt(50, .usdc), .ethereum),
+            .cometBorrow(.alice, .amt(10, .usdc), .cusdcv3, .ethereum),
+            .quote(.basic)
+        ],
+        when: .cometRepay(
+            from: .alice,
+            market: .cusdcv3,
+            repayAmount: .max(.usdc),
+            collateralAmounts: [],
+            on: .ethereum
+        ),
+        expect: .success(
+            .single(
+                .multicall([
+                    .repayAndWithdrawMultipleAssetsFromComet(
+                        repayAmount: .max(.usdc),
+                        collateralAmounts: [],
+                        market: .cusdcv3,
+                        network: .ethereum
+                    ),
+                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+                ])
+            )
+        )
+    ),
+    // @skip: QuarkBuilder reverts with `Panic` 
+    .init(
+        name: "testCometRepayWithBridge",
+        given: [
+            .tokenBalance(.alice, .amt(4, .usdc), .ethereum),
+            .quote(.basic),
+            .acrossQuote(.amt(1, .usdc), 0.01),
+        ],
+        when: .cometRepay(
+            from: .alice,
+            market: .cusdcv3,
+            repayAmount: .amt(2, .usdc),
+            collateralAmounts: [.amt(1, .link)],
+            on: .base
+        ),
+        expect: .success(
+            .multi([
+                .multicall([
+                    .bridge(
+                        bridge: "Across",
+                        srcNetwork: .ethereum,
+                        destinationNetwork: .base,
+                        tokenAmount: .amt(49.48, .usdc)
+                    ),
+                    .quotePay(payment: .amt(0.06, .usdc), payee: .stax, quote: .basic),
+                ]),
+                .repayAndWithdrawMultipleAssetsFromComet(
+                    repayAmount: .amt(2, .usdc),
+                    collateralAmounts: [.amt(1, .link)],
+                    market: .cusdcv3,
+                    network: .base
+                ),
+            ])
+        ),
+        skip: true
+    ),
+    // @skip: QuarkBuilder reverts with `Panic` 
+    .init(
+        name: "testCometRepayMaxWithBridge",
+        given: [
+            .tokenBalance(.alice, .amt(50, .usdc), .ethereum),
+            .cometBorrow(.alice, .amt(10, .usdc), .cusdcv3, .base),
+            .quote(.basic),
+            .acrossQuote(.amt(1, .usdc), 0.01)
+        ],
+        when: .cometRepay(
+            from: .alice,
+            market: .cusdcv3,
+            repayAmount: .max(.usdc),
+            collateralAmounts: [],
+            on: .base
+        ),
+        expect: .success(
+            .single(
+                .multicall([
+                    .repayAndWithdrawMultipleAssetsFromComet(
+                        repayAmount: .max(.usdc),
+                        collateralAmounts: [],
+                        market: .cusdcv3,
+                        network: .base
+                    ),
+                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
+                ])
+            )
+        ),
+        skip: true
+    ),
 ]
 
 let tests = allTests.filter { !$0.skip }
@@ -736,7 +740,7 @@ enum Call: CustomStringConvertible, Equatable {
             let withdrawString = collateralAmounts.map {collateralAmount in
                 "\(collateralAmount.amount) \(collateralAmount.token.symbol)"
             }.joined(separator: ",")
-            return "repayAndWithdrawMultipleAssetsFromComet(repay \(repayAmount.amount) \(repayAmount.token.symbol), withdraw [\(withdrawString)]  to \(market.description) on \(network.description))"
+            return "repayAndWithdrawMultipleAssetsFromComet(repay \(repayAmount.amount) \(repayAmount.token.symbol), and withdraw [\(withdrawString)] from \(market.description) on \(network.description))"
         case let .multicall(calls):
             return "multicall(\(calls.map { $0.description }.joined(separator: ", ")))"
         case let .wrapAsset(token):
@@ -996,7 +1000,7 @@ enum Token: Hashable, Equatable {
         -> TokenAmount
     {
         let token = Token.from(network: network, address: address)
-        return TokenAmount.amt(Double(amount) / pow(10, Double(token.decimals)), token)
+        return TokenAmount(fromWei: amount, ofToken: token)
     }
 
     func hash(into hasher: inout Hasher) {
