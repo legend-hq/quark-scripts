@@ -707,14 +707,7 @@ enum Call: CustomStringConvertible, Equatable {
 
         if scriptAddress == getScriptAddress(CometRepayAndWithdrawMultipleAssets.creationCode) {
             if let (comet, assets, amounts, baseAsset, repayAmount) = try? CometRepayAndWithdrawMultipleAssets.runDecode(input: calldata) {
-
-                let collateralAmounts = zip(amounts, assets).map {
-                    Token.getTokenAmount(
-                        amount: $0,
-                        network: network,
-                        address: $1
-                    )
-                }
+                let collateralAmounts = zip(amounts, assets).map { Token.getTokenAmount(amount: $0, network: network, address: $1) }
 
                 return repayAndWithdrawMultipleAssetsFromComet(
                     repayAmount: Token.getTokenAmount(amount: repayAmount, network: network, address: baseAsset),
