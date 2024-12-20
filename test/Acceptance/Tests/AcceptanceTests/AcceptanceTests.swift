@@ -501,7 +501,17 @@ let allTests: [AcceptanceTest] = [
         name: "testCometRepayWithBridge",
         given: [
             .tokenBalance(.alice, .amt(4, .usdc), .ethereum),
-            .quote(.basic),
+            .quote(
+                .custom(
+                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    prices: Dictionary(
+                        uniqueKeysWithValues: Token.knownCases.map { token in
+                            (token, token.defaultUsdPrice)
+                        }
+                    ),
+                    fees: [.ethereum: 0.1, .base: 0.2]
+                )
+            ),
             .acrossQuote(.amt(1, .usdc), 0.01),
         ],
         when: .cometRepay(
@@ -518,9 +528,9 @@ let allTests: [AcceptanceTest] = [
                         bridge: "Across",
                         srcNetwork: .ethereum,
                         destinationNetwork: .base,
-                        tokenAmount: .amt(49.48, .usdc)
+                        tokenAmount: .amt(2, .usdc)
                     ),
-                    .quotePay(payment: .amt(0.06, .usdc), payee: .stax, quote: .basic),
+                    .quotePay(payment: .amt(0.3, .usdc), payee: .stax, quote: .basic),
                 ]),
                 .repayAndWithdrawMultipleAssetsFromComet(
                     repayAmount: .amt(2, .usdc),
@@ -538,7 +548,17 @@ let allTests: [AcceptanceTest] = [
         given: [
             .tokenBalance(.alice, .amt(50, .usdc), .ethereum),
             .cometBorrow(.alice, .amt(10, .usdc), .cusdcv3, .base),
-            .quote(.basic),
+            .quote(
+                .custom(
+                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    prices: Dictionary(
+                        uniqueKeysWithValues: Token.knownCases.map { token in
+                            (token, token.defaultUsdPrice)
+                        }
+                    ),
+                    fees: [.ethereum: 0.1, .base: 0.1]
+                )
+            ),
             .acrossQuote(.amt(1, .usdc), 0.01)
         ],
         when: .cometRepay(
@@ -549,17 +569,23 @@ let allTests: [AcceptanceTest] = [
             on: .base
         ),
         expect: .success(
-            .single(
+            .multi([
                 .multicall([
-                    .repayAndWithdrawMultipleAssetsFromComet(
-                        repayAmount: .max(.usdc),
-                        collateralAmounts: [],
-                        market: .cusdcv3,
-                        network: .base
+                    .bridge(
+                        bridge: "Across",
+                        srcNetwork: .ethereum,
+                        destinationNetwork: .base,
+                        tokenAmount: .amt(10.01, .usdc)
                     ),
-                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-                ])
-            )
+                    .quotePay(payment: .amt(0.2, .usdc), payee: .stax, quote: .basic),
+                ]),
+                .repayAndWithdrawMultipleAssetsFromComet(
+                    repayAmount: .max(.usdc),
+                    collateralAmounts: [],
+                    market: .cusdcv3,
+                    network: .base
+                ),
+            ])
         ),
         skip: true
     ),
