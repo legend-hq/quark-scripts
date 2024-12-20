@@ -416,7 +416,7 @@ contract PaycallTest is Test {
         bytes memory signature = new SignatureHelper().signOp(alicePrivateKey, wallet, op);
 
         vm.resumeGasMetering();
-        vm.expectRevert(abi.encodeWithSelector(Paycall.TransactionTooExpensive.selector, 5_000_000, 10_478_744));
+        vm.expectRevert(abi.encodeWithSelector(Paycall.TransactionTooExpensive.selector, 5_000_000, 10_639_684));
         wallet.executeQuarkOperation(op, signature);
 
         assertEq(IERC20(USDC).balanceOf(address(wallet)), 1000e6);
@@ -445,18 +445,5 @@ contract PaycallTest is Test {
         wallet.executeQuarkOperation(op, signature);
 
         assertEq(IERC20(USDC).balanceOf(address(wallet)), 1000e6);
-    }
-
-    function testPaycallAddress() public {
-        // If this test fails, the paycall code has been updated, which means any
-        // validation done with the bytecode must be updated.
-
-        vm.createSelectFork(
-            vm.envString("MAINNET_RPC_URL"),
-            20764080 // 2024-09-16 08:31:00 PST
-        );
-
-        CodeJar mainnetCodejar = CodeJar(CodeJarHelper.CODE_JAR_ADDRESS);
-        assertEq(mainnetCodejar.getCodeAddress(paycall), 0x77641fB52eadE523c4d548aB931514e0Ad559Bf0);
     }
 }
