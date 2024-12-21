@@ -40,7 +40,7 @@ let transferTests: [AcceptanceTest] = [
         expect: .revert(
             .unableToConstructActionIntent(
                 false,
-                Token.usdc.symbol,
+                "",
                 0,
                 "UNABLE_TO_CONSTRUCT",
                 Token.usdc.symbol,

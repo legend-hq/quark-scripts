@@ -318,12 +318,14 @@ enum Comet: Hashable, Equatable {
         // eventually this should be migrated to use builderpack instead.
         case (.ethereum, .cusdcv3):
             return EthAddress("0xc3d688B66703497DAA19211EEdff47f25384cdc3")
-        case (.base, .cusdcv3):
-            return EthAddress("0xb125E6687d4313864e53df431d5425969c15Eb2F")
         case (.ethereum, .cwethv3):
             return EthAddress("0xA17581A9E3356d9A858b789D68B4d866e593aE94")
+        case (.base, .cusdcv3):
+            return EthAddress("0xb125E6687d4313864e53df431d5425969c15Eb2F")
         case (.base, .cwethv3):
             return EthAddress("0x46e6b214b524310239732D51387075E0e70970bf")
+        case (.arbitrum, .cusdcv3):
+            return EthAddress("0x9c4ec768c28520B50860ea7a15bd7213a9fF58bf")
         case (_, .cusdcv3):
             fatalError("no market .cusdcv3 for network \(network.description)")
         case (_, .cwethv3):
@@ -362,6 +364,8 @@ enum Comet: Hashable, Equatable {
             return .cusdcv3
         case (.base, "0x46e6b214b524310239732D51387075E0e70970bf"):
             return .cwethv3
+        case (.arbitrum, "0x9c4ec768c28520B50860ea7a15bd7213a9fF58bf"):
+            return .cusdcv3
         case _:
             return .unknownComet(address)
         }
@@ -795,10 +799,10 @@ class Context {
             )
         case let .cometRepay(from, market, repayAmount, collateralAmounts, network):
             return try await QuarkBuilder.cometRepay(
-                repayIntent: .init(
+                intent: .init(
                     amount: repayAmount.amount,
                     assetSymbol: repayAmount.token.symbol,
-                    blockTimestamp: 0,
+                    blockTimestamp: BigUInt(1_000_000),
                     chainId: BigUInt(network.chainId),
                     collateralAmounts: collateralAmounts.map {
                         $0.amount
@@ -825,10 +829,10 @@ class Context {
 
         case let .cometSupply(from, market, amount, network):
             return try await QuarkBuilder.cometSupply(
-                cometSupplyIntent: .init(
+                intent: .init(
                     amount: amount.amount,
                     assetSymbol: amount.token.symbol,
-                    blockTimestamp: 0,
+                    blockTimestamp: BigUInt(1_000_000),
                     chainId: BigUInt(network.chainId),
                     comet: market.address(network: network),
                     sender: from.address,
@@ -849,7 +853,7 @@ class Context {
 
         case let .transfer(from, to, amount, network):
             return try await QuarkBuilder.transfer(
-                transferIntent: .init(
+                intent: .init(
                     chainId: BigUInt(network.chainId),
                     assetSymbol: amount.token.symbol,
                     amount: amount.amount,
