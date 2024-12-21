@@ -167,7 +167,6 @@ let cometRepayTests: [AcceptanceTest] = [
             )
         )
     ),
-    // @skip: QuarkBuilder reverts with `Panic` 
     .init(
         name: "testCometRepayWithBridge",
         given: [
@@ -199,7 +198,7 @@ let cometRepayTests: [AcceptanceTest] = [
                         bridge: "Across",
                         srcNetwork: .ethereum,
                         destinationNetwork: .base,
-                        tokenAmount: .amt(2, .usdc)
+                        tokenAmount: .amt(3.02, .usdc)
                     ),
                     .quotePay(payment: .amt(0.3, .usdc), payee: .stax, quote: .basic),
                 ]),
@@ -210,10 +209,8 @@ let cometRepayTests: [AcceptanceTest] = [
                     network: .base
                 ),
             ])
-        ),
-        skip: true
+        )
     ),
-    // @skip: QuarkBuilder reverts with `Panic` 
     .init(
         name: "testCometRepayMaxWithBridge",
         given: [
@@ -258,6 +255,5 @@ let cometRepayTests: [AcceptanceTest] = [
                 ),
             ])
         ),
-        skip: true
     ),
 ]

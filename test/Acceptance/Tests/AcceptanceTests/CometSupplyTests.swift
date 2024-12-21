@@ -126,6 +126,31 @@ let cometSupplyTests: [AcceptanceTest] = [
         )
     ),
     .init(
+        name: "Alice supplies max to Comet with bridge (testCometSupplyMaxWithBridgeAndQuotePay)",
+        given: [
+            .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),
+            .tokenBalance(.alice, .amt(50, .usdc), .base),
+            .quote(.basic),
+            .acrossQuote(.amt(1, .usdc), 0.01),
+        ],
+        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .max(.usdc), on: .arbitrum),
+        expect: .success(
+            .multi([
+                .bridge(
+                    bridge: "Across",
+                    srcNetwork: .base,
+                    destinationNetwork: .arbitrum,
+                    tokenAmount: .amt(50, .usdc)
+                ),
+                .multicall([
+                    .supplyToComet(
+                        tokenAmount: .amt(98.44, .usdc), market: .cusdcv3, network: .arbitrum),
+                    .quotePay(payment: .amt(0.06, .usdc), payee: .stax, quote: .basic),
+                ]),
+            ])
+        )
+    ),
+    .init(
         name: "Alice supplies to Comet, paying via Quote Pay (testCometSupplyWithQuotePay)",
         given: [
             .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
