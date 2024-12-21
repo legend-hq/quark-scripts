@@ -6,14 +6,10 @@ import Testing
 
 @testable import Acceptance
 
-let allTests: [AcceptanceTest] =
-transferTests +
-cometBorrowTests +
-cometSupplyTests + 
-cometRepayTests +
-[
-
-]
+let allTests: [AcceptanceTest] = transferTests +
+    cometBorrowTests +
+    cometSupplyTests + 
+    cometRepayTests
 
 let tests = allTests.filter { !$0.skip }
 let filteredTests = tests.contains { $0.only } ? tests.filter { $0.only } : tests
