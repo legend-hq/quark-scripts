@@ -6,590 +6,10 @@ import Testing
 
 @testable import Acceptance
 
-let allTests: [AcceptanceTest] = [
-    .init(
-        name: "Alice transfers 10 USDC to Bob on Ethereum",
-        given: [
-            .tokenBalance(.alice, .amt(100, .usdc), .ethereum),
-            .quote(.basic),
-        ],
-        when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .ethereum),
-        expect: .success(
-            .single(
-                .multicall([
-                    .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
-                    .quotePay(payment: .amt(0.10, .usdc), payee: .stax, quote: .basic),
-                ])))
-    ),
-    .init(
-        name: "Alice transfers 10 USDC to Bob on Arbitrum",
-        given: [
-            .tokenBalance(.alice, .amt(100, .usdc), .arbitrum),
-            .quote(.basic),
-        ],
-        when: .transfer(from: .alice, to: .bob, amount: .amt(10, .usdc), on: .arbitrum),
-        expect: .success(
-            .single(
-                .multicall([
-                    .transferErc20(tokenAmount: .amt(10, .usdc), recipient: .bob),
-                    .quotePay(payment: .amt(0.04, .usdc), payee: .stax, quote: .basic),
-                ])))
-    ),
-    .init(
-        name: "Alice attempts transfers MAX USDC to Bob on Arbitrum",
-        given: [
-            .tokenBalance(.alice, .amt(100, .usdc), .arbitrum),
-            .quote(.basic),
-        ],
-        when: .transfer(from: .alice, to: .bob, amount: .amt(100, .usdc), on: .arbitrum),
-        expect: .revert(
-            .unableToConstructActionIntent(
-                false,
-                Token.usdc.symbol,
-                0,
-                "UNABLE_TO_CONSTRUCT",
-                Token.usdc.symbol,
-                TokenAmount.amt(0.04, .usdc).amount
-            )
-        )
-    ),
-    .init(
-        name: "Alice attempts to transfers perceived MAX USDC to Bob on Arbitrum via Bridge",
-        given: [
-            .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),
-            .tokenBalance(.alice, .amt(50, .usdc), .base),
-            .quote(.basic),
-            .acrossQuote(.amt(1, .usdc), 0.01),
-        ],
-        when: .transfer(from: .alice, to: .bob, amount: .amt(100, .usdc), on: .arbitrum),
-        expect: .revert(
-            .unableToConstructActionIntent(
-                true,
-                Token.usdc.symbol,
-                TokenAmount.amt(1.5, .usdc).amount,
-                "UNABLE_TO_CONSTRUCT",
-                Token.usdc.symbol,
-                TokenAmount.amt(0.06, .usdc).amount
-            )
-        )
-    ),
-    .init(
-        name: "Alice transfers MAX USDC (with uint256.max) to Bob on Arbitrum via Bridge",
-        given: [
-            .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),
-            .tokenBalance(.alice, .amt(50, .usdc), .base),
-            .quote(.basic),
-            .acrossQuote(.amt(1, .usdc), 0.01),
-        ],
-        when: .transfer(from: .alice, to: .bob, amount: .max(.usdc), on: .arbitrum),
-        expect: .success(
-            .multi([
-                .bridge(
-                    bridge: "Across",
-                    srcNetwork: .base,
-                    destinationNetwork: .arbitrum,
-                    tokenAmount: .amt(50, .usdc)
-                ),
-                .multicall([
-                    .transferErc20(tokenAmount: .amt(98.44, .usdc), recipient: .bob),
-                    .quotePay(payment: .amt(0.06, .usdc), payee: .stax, quote: .basic),
-                ]),
-            ])
-        )
-    ),
-    .init(
-        name: "Alice bridges sumSrcBalance via Across when inputAmount > sumSrcBalance",
-        given: [
-            .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),
-            .tokenBalance(.alice, .amt(50, .usdc), .base),
-            .quote(.basic),
-            .acrossQuote(.amt(1, .usdc), 0.01),
-        ],
-        when: .transfer(from: .alice, to: .bob, amount: .amt(99, .usdc), on: .arbitrum),
-        expect: .revert(
-            .unableToConstructActionIntent(
-                true,
-                Token.usdc.symbol,
-                TokenAmount.amt(1.5, .usdc).amount,
-                "UNABLE_TO_CONSTRUCT",
-                Token.usdc.symbol,
-                TokenAmount.amt(0.06, .usdc).amount
-            )
-        )
-    ),
-    .init(
-        name:
-            "Alice attempts to transfers 75 USDC to Bob on Arbitrum via Bridge but doesn't have all the quotes",
-        given: [
-            .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),
-            .tokenBalance(.alice, .amt(50, .usdc), .base),
-            .quote(
-                .custom(
-                    quoteId: Hex(
-                        "0x00000000000000000000000000000000000000000000000000000000000000CC"),
-                    prices: Dictionary(
-                        uniqueKeysWithValues: Token.knownCases.map { token in
-                            (token, token.defaultUsdPrice)
-                        }
-                    ),
-                    fees: [
-                        .arbitrum: 0.04
-                    ]
-                )
-            ),
-            .acrossQuote(.amt(1, .usdc), 0.01),
-        ],
-        when: .transfer(from: .alice, to: .bob, amount: .amt(75, .usdc), on: .arbitrum),
-        expect: .revert(
-            .maxCostMissingForChain(BigUInt(Network.base.chainId))
-        )
-    ),
-    .init(
-        name: "Alice transfers USDC to Bob on Arbitrum via Bridge",
-        given: [
-            .tokenBalance(.alice, .amt(50, .usdc), .arbitrum),
-            .tokenBalance(.alice, .amt(50, .usdc), .base),
-            .quote(.basic),
-            .acrossQuote(.amt(1, .usdc), 0.01),
-        ],
-        when: .transfer(from: .alice, to: .bob, amount: .amt(98, .usdc), on: .arbitrum),
-        expect: .success(
-            .multi([
-                .multicall([
-                    .bridge(
-                        bridge: "Across",
-                        srcNetwork: .base,
-                        destinationNetwork: .arbitrum,
-                        tokenAmount: .amt(49.48, .usdc)
-                    ),
-                    .quotePay(payment: .amt(0.06, .usdc), payee: .stax, quote: .basic),
-                ]),
-                .transferErc20(tokenAmount: .amt(98, .usdc), recipient: .bob),
-            ])
-        )
-    ),
-    .init(
-        name: "Alice supplies 0.5 WETH to cUSDCv3 on Ethereum",
-        given: [
-            .tokenBalance(.alice, .amt(1.0, .weth), .ethereum),
-            .quote(.basic),
-        ],
-        when: .payWith(
-            currency: .weth,
-            .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(0.5, .weth), on: .ethereum)
-        ),
-        expect: .success(
-            .single(
-                .multicall([
-                    .supplyToComet(
-                        tokenAmount: .amt(0.5, .weth), market: .cusdcv3, network: .ethereum),
-                    .quotePay(
-                        payment: .amt(0.000025000000000062, .weth), payee: .stax, quote: .basic),
-                ])
-            )
-        )
-    ),
-    // @skip: Alice cannot supply ETH to comet because Actions.cometSupply doesn't wrap ETH
-    .init(
-        name: "Alice supplies 0.5 ETH to cUSDCv3 on Ethereum",
-        given: [
-            .tokenBalance(.alice, .amt(1.0, .eth), .ethereum),
-            .quote(.basic),
-        ],
-        when: .payWith(
-            currency: .eth,
-            .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(0.5, .eth), on: .ethereum)
-        ),
-        expect: .success(
-            .single(
-                .multicall([
-                    .supplyToComet(
-                        tokenAmount: .amt(0.5, .eth), market: .cusdcv3, network: .ethereum),
-                    .quotePay(payment: .amt(0.000025, .eth), payee: .stax, quote: .basic),
-                ])
-            )
-        ),
-        skip: true
-    ),
-    .init(
-        name:
-            "WIP: Alice repays 75 USDC of a 100 USDC borrow against 0.3 WETH on cUSDCv3 on Ethereum",
-        given: [
-            .tokenBalance(.alice, .amt(0.5, .weth), .ethereum),
-            .cometSupply(.alice, .amt(0.3, .weth), .cusdcv3, .ethereum),
-            .cometBorrow(.alice, .amt(100, .usdc), .cusdcv3, .ethereum),
-            .quote(.basic),
-        ],
-        when: .transfer(from: .alice, to: .bob, amount: .amt(50, .usdc), on: .arbitrum),
-        // FIXME: this should not revert! borrowed funds should be added to token balance
-        expect: .revert(
-            .badInputInsufficientFunds(
-                Token.usdc.symbol,
-                TokenAmount.amt(50, .usdc).amount,
-                TokenAmount.amt(0, .usdc).amount
-            )
-        )
-    ),
-    .init(
-        name:
-            "Alice supplies, but does not allow enough for quote pay (testCometSupplyInsufficientFunds)",
-        given: [.quote(.basic)],
-        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(2, .usdc), on: .ethereum),
-        expect: .revert(
-            .badInputInsufficientFunds(
-                Token.usdc.symbol,
-                TokenAmount.amt(2, .usdc).amount,
-                TokenAmount.amt(0, .usdc).amount
-            )
-        )
-    ),
-    .init(
-        name: "Alice supplies, but cannot cover operation cost (testCometSupplyMaxCostTooHigh)",
-        given: [
-            .tokenBalance(.alice, .amt(1.0, .usdc), .ethereum),
-            .tokenBalance(.alice, .amt(1.0, .usdc), .base),
-            .quote(
-                .custom(
-                    quoteId: Hex(
-                        "0x00000000000000000000000000000000000000000000000000000000000000CC"),
-                    prices: [Token.usdc: 1.0],
-                    fees: [
-                        Network.ethereum: 1000,
-                        Network.base: 0.03,
-                    ]
-                )
-            ),
-        ],
-        when: .payWith(
-            currency: .usdc,
-            .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum)
-        ),
-        expect: .revert(
-            .unableToConstructActionIntent(
-                false,
-                "",
-                0,
-                "IMPOSSIBLE_TO_CONSTRUCT",
-                Token.usdc.symbol,
-                TokenAmount.amt(1000.03001, .usdc).amount
-            )
-        )
-    ),
-    .init(
-        name: "Alice supplies to Comet (testSimpleCometSupply)",
-        given: [
-            .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
-            .tokenBalance(.alice, .amt(1.5, .usdc), .base),
-            .quote(.basic),
-        ],
-        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum),
-        expect: .success(
-            .single(
-                .multicall([
-                    .supplyToComet(
-                        tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
-                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-                ])
-            )
-        )
-    ),
-    .init(
-        name: "Alice supplies max to Comet (testSimpleCometSupplyMax)",
-        given: [
-            .tokenBalance(.alice, .amt(3, .usdc), .ethereum),
-            .quote(.basic),
-        ],
-        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .max(.usdc), on: .ethereum),
-        expect: .success(
-            .single(
-                .multicall([
-                    .supplyToComet(
-                        tokenAmount: .amt(2.9, .usdc), market: .cusdcv3, network: .ethereum),
-                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-                ])
-            )
-
-        )
-    ),
-    .init(
-        name: "Alice supplies to Comet, paying via Quote Pay (testCometSupplyWithQuotePay)",
-        given: [
-            .tokenBalance(.alice, .amt(1.5, .usdc), .ethereum),
-            .tokenBalance(.alice, .amt(1.5, .usdc), .base),
-            .quote(.basic),
-        ],
-        when: .cometSupply(from: .alice, market: .cusdcv3, amount: .amt(1, .usdc), on: .ethereum),
-        expect: .success(
-            .single(
-                .multicall([
-                    .supplyToComet(
-                        tokenAmount: .amt(1, .usdc), market: .cusdcv3, network: .ethereum),
-                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-                ])
-            )
-
-        )
-    ),
-    .init(
-        name: "testCometRepay",
-        given: [
-            .tokenBalance(.alice, .amt(2, .usdc), .ethereum),
-            .cometSupply(.alice, .amt(1, .link), .cusdcv3, .ethereum),
-            .quote(.basic)
-        ],
-        when: .cometRepay(
-            from: .alice,
-            market: .cusdcv3,
-            repayAmount: .amt(1, .usdc),
-            collateralAmounts: [.amt(1, .link)],
-            on: .ethereum
-        ),
-        expect: .success(
-            .single(
-                .multicall([
-                    .repayAndWithdrawMultipleAssetsFromComet(
-                        repayAmount: .amt(1, .usdc),
-                        collateralAmounts: [.amt(1, .link)],
-                        market: .cusdcv3,
-                        network: .ethereum
-                    ),
-                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-                ])
-            )
-        )
-    ),
-    .init(
-        name: "testCometRepayFundsUnavailable",
-        given: [.quote(.basic)],
-        when: .cometRepay(
-            from: .alice,
-            market: .cusdcv3,
-            repayAmount: .amt(1, .usdc),
-            collateralAmounts: [],
-            on: .ethereum
-        ),
-        expect: .revert(
-            .badInputInsufficientFunds(
-                Token.usdc.symbol,
-                TokenAmount.amt(1, .usdc).amount,
-                TokenAmount.amt(0, .usdc).amount
-            )
-        )
-    ),
-    .init(
-        name: "testCometRepayNotEnoughPaymentToken",
-        given: [
-            .tokenBalance(.alice, .amt(0.4, .usdc), .ethereum),
-            .tokenBalance(.alice, .amt(1, .weth), .ethereum),
-            .quote(
-                .custom(
-                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
-                    prices: Dictionary(
-                        uniqueKeysWithValues: Token.knownCases.map { token in
-                            (token, token.defaultUsdPrice)
-                        }
-                    ),
-                    fees: [.ethereum: 0.5]
-                )
-            )
-        ],
-        when: .cometRepay(
-            from: .alice,
-            market: .cwethv3,
-            repayAmount: .amt(1, .weth),
-            collateralAmounts: [],
-            on: .ethereum
-        ),
-        expect: .revert(
-            .unableToConstructActionIntent(
-                false,
-                "",
-                0,
-                "IMPOSSIBLE_TO_CONSTRUCT",
-                Token.usdc.symbol,
-                TokenAmount.amt(0.5, .usdc).amount
-            )
-        )
-    ),
-    .init(
-        name: "testCometRepayWithAutoWrapper",
-        given: [
-            .tokenBalance(.alice, .amt(1, .usdc), .ethereum),
-            .tokenBalance(.alice, .amt(1, .eth), .ethereum),
-            .quote(.basic)
-        ],
-        when: .cometRepay(
-            from: .alice,
-            market: .cwethv3,
-            repayAmount: .amt(1, .weth),
-            collateralAmounts: [.amt(1, .link)],
-            on: .ethereum
-        ),
-        expect: .success(
-            .single(
-                .multicall([
-                    .wrapAsset(.eth),
-                    .repayAndWithdrawMultipleAssetsFromComet(
-                        repayAmount: .amt(1, .weth),
-                        collateralAmounts: [.amt(1, .link)],
-                        market: .cwethv3,
-                        network: .ethereum
-                    ),
-                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-                ])
-            )
-        )
-    ),
-    .init(
-        name: "testCometRepayPayFromWithdraw",
-        given: [
-            .tokenBalance(.alice, .amt(1, .weth), .ethereum),
-            .quote(.basic)
-        ],
-        when: .cometRepay(
-            from: .alice,
-            market: .cwethv3,
-            repayAmount: .amt(1, .weth),
-            collateralAmounts: [.amt(1, .usdc)],
-            on: .ethereum
-        ),
-        expect: .success(
-            .single(
-                .multicall([
-                    .repayAndWithdrawMultipleAssetsFromComet(
-                        repayAmount: .amt(1, .weth),
-                        collateralAmounts: [.amt(1, .usdc)],
-                        market: .cwethv3,
-                        network: .ethereum
-                    ),
-                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-                ])
-            )
-        )
-
-    ),
-    .init(
-        name: "testCometRepayMaxWithQuotePay",
-        given: [
-            .tokenBalance(.alice, .amt(50, .usdc), .ethereum),
-            .cometBorrow(.alice, .amt(10, .usdc), .cusdcv3, .ethereum),
-            .quote(.basic)
-        ],
-        when: .cometRepay(
-            from: .alice,
-            market: .cusdcv3,
-            repayAmount: .max(.usdc),
-            collateralAmounts: [],
-            on: .ethereum
-        ),
-        expect: .success(
-            .single(
-                .multicall([
-                    .repayAndWithdrawMultipleAssetsFromComet(
-                        repayAmount: .max(.usdc),
-                        collateralAmounts: [],
-                        market: .cusdcv3,
-                        network: .ethereum
-                    ),
-                    .quotePay(payment: .amt(0.1, .usdc), payee: .stax, quote: .basic),
-                ])
-            )
-        )
-    ),
-    // @skip: QuarkBuilder reverts with `Panic` 
-    .init(
-        name: "testCometRepayWithBridge",
-        given: [
-            .tokenBalance(.alice, .amt(4, .usdc), .ethereum),
-            .quote(
-                .custom(
-                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
-                    prices: Dictionary(
-                        uniqueKeysWithValues: Token.knownCases.map { token in
-                            (token, token.defaultUsdPrice)
-                        }
-                    ),
-                    fees: [.ethereum: 0.1, .base: 0.2]
-                )
-            ),
-            .acrossQuote(.amt(1, .usdc), 0.01),
-        ],
-        when: .cometRepay(
-            from: .alice,
-            market: .cusdcv3,
-            repayAmount: .amt(2, .usdc),
-            collateralAmounts: [.amt(1, .link)],
-            on: .base
-        ),
-        expect: .success(
-            .multi([
-                .multicall([
-                    .bridge(
-                        bridge: "Across",
-                        srcNetwork: .ethereum,
-                        destinationNetwork: .base,
-                        tokenAmount: .amt(2, .usdc)
-                    ),
-                    .quotePay(payment: .amt(0.3, .usdc), payee: .stax, quote: .basic),
-                ]),
-                .repayAndWithdrawMultipleAssetsFromComet(
-                    repayAmount: .amt(2, .usdc),
-                    collateralAmounts: [.amt(1, .link)],
-                    market: .cusdcv3,
-                    network: .base
-                ),
-            ])
-        ),
-        skip: true
-    ),
-    // @skip: QuarkBuilder reverts with `Panic` 
-    .init(
-        name: "testCometRepayMaxWithBridge",
-        given: [
-            .tokenBalance(.alice, .amt(50, .usdc), .ethereum),
-            .cometBorrow(.alice, .amt(10, .usdc), .cusdcv3, .base),
-            .quote(
-                .custom(
-                    quoteId: Hex("0x00000000000000000000000000000000000000000000000000000000000000CC"),
-                    prices: Dictionary(
-                        uniqueKeysWithValues: Token.knownCases.map { token in
-                            (token, token.defaultUsdPrice)
-                        }
-                    ),
-                    fees: [.ethereum: 0.1, .base: 0.1]
-                )
-            ),
-            .acrossQuote(.amt(1, .usdc), 0.01)
-        ],
-        when: .cometRepay(
-            from: .alice,
-            market: .cusdcv3,
-            repayAmount: .max(.usdc),
-            collateralAmounts: [],
-            on: .base
-        ),
-        expect: .success(
-            .multi([
-                .multicall([
-                    .bridge(
-                        bridge: "Across",
-                        srcNetwork: .ethereum,
-                        destinationNetwork: .base,
-                        tokenAmount: .amt(10.01, .usdc)
-                    ),
-                    .quotePay(payment: .amt(0.2, .usdc), payee: .stax, quote: .basic),
-                ]),
-                .repayAndWithdrawMultipleAssetsFromComet(
-                    repayAmount: .max(.usdc),
-                    collateralAmounts: [],
-                    market: .cusdcv3,
-                    network: .base
-                ),
-            ])
-        ),
-        skip: true
-    ),
-]
+let allTests: [AcceptanceTest] = transferTests +
+    cometBorrowTests +
+    cometSupplyTests + 
+    cometRepayTests
 
 let tests = allTests.filter { !$0.skip }
 let filteredTests = tests.contains { $0.only } ? tests.filter { $0.only } : tests
@@ -599,6 +19,12 @@ enum Call: CustomStringConvertible, Equatable {
         bridge: String, srcNetwork: Network, destinationNetwork: Network, tokenAmount: TokenAmount)
     case transferErc20(tokenAmount: TokenAmount, recipient: Account)
     case supplyToComet(tokenAmount: TokenAmount, market: Comet, network: Network)
+    case supplyMultipleAssetsAndBorrowFromComet(
+        borrowAmount: TokenAmount,
+        collateralAmounts: [TokenAmount],
+        market: Comet,
+        network: Network
+    )
     case repayAndWithdrawMultipleAssetsFromComet(
         repayAmount: TokenAmount,
         collateralAmounts: [TokenAmount],
@@ -718,6 +144,18 @@ enum Call: CustomStringConvertible, Equatable {
             }
         }
 
+        if scriptAddress == getScriptAddress(CometSupplyMultipleAssetsAndBorrow.creationCode) {
+            if let (comet, assets, amounts, baseAsset, borrowAmount) = try? CometSupplyMultipleAssetsAndBorrow.runDecode(input: calldata) {
+                let collateralAmounts = zip(amounts, assets).map { Token.getTokenAmount(amount: $0, network: network, address: $1) }
+                return supplyMultipleAssetsAndBorrowFromComet(
+                    borrowAmount: Token.getTokenAmount(amount: borrowAmount, network: network, address: baseAsset),
+                    collateralAmounts: collateralAmounts,
+                    market: Comet.from(network: network, address: comet),
+                    network: network
+                )
+            }
+        }
+
         if scriptAddress == getScriptAddress(WrapperActions.creationCode) {
             if let (_) = try? WrapperActions.wrapAllETHDecode(input: calldata) {
                 return .wrapAsset(.eth)
@@ -750,6 +188,11 @@ enum Call: CustomStringConvertible, Equatable {
         case let .supplyToComet(tokenAmount, market, network):
             return
                 "supplyToComet(\(tokenAmount.amount) \(tokenAmount.token.symbol) to \(market.description) on \(network.description))"
+        case let .supplyMultipleAssetsAndBorrowFromComet(borrowAmount, collateralAmounts, market, network):
+            let collateralsString = collateralAmounts.map {collateralAmount in
+                "\(collateralAmount.amount) \(collateralAmount.token.symbol)"
+            }.joined(separator: ",")
+            return "supplyMultipleAssetsAndBorrowFromComet(supply [\(collateralsString)] and borrow \(borrowAmount.amount) \(borrowAmount.token.symbol) from \(market.description) on \(network.description) )"
         case let .repayAndWithdrawMultipleAssetsFromComet(
             repayAmount,
             collateralAmounts,
@@ -879,6 +322,8 @@ enum Comet: Hashable, Equatable {
             return EthAddress("0xb125E6687d4313864e53df431d5425969c15Eb2F")
         case (.ethereum, .cwethv3):
             return EthAddress("0xA17581A9E3356d9A858b789D68B4d866e593aE94")
+        case (.base, .cwethv3):
+            return EthAddress("0x46e6b214b524310239732D51387075E0e70970bf")
         case (_, .cusdcv3):
             fatalError("no market .cusdcv3 for network \(network.description)")
         case (_, .cwethv3):
@@ -915,6 +360,8 @@ enum Comet: Hashable, Equatable {
             return .cwethv3
         case (.base, "0xb125E6687d4313864e53df431d5425969c15Eb2F"):
             return .cusdcv3
+        case (.base, "0x46e6b214b524310239732D51387075E0e70970bf"):
+            return .cwethv3
         case _:
             return .unknownComet(address)
         }
@@ -976,28 +423,32 @@ enum Token: Hashable, Equatable {
     case eth
     case weth
     case link
+    case usdt
     case unknownToken(EthAddress)
 
-    static let knownCases: [Token] = [.usdc, .eth, .weth, .link]
+    static let knownCases: [Token] = [.usdc, .eth, .weth, .link, .usdt]
 
     static let networkTokenAddress: [Network: [Token: EthAddress]] = [
         .ethereum: [
             .eth: EthAddress("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"),
             .weth: EthAddress("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
             .usdc: EthAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
-            .link: EthAddress("0x514910771af9ca656af840dff83e8264ecf986ca")
+            .link: EthAddress("0x514910771af9ca656af840dff83e8264ecf986ca"),
+            .usdt: EthAddress("0xdac17f958d2ee523a2206206994597c13d831ec7"),
         ],
         .base: [
             .eth: EthAddress("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"),
             .weth: EthAddress("0x4200000000000000000000000000000000000006"),
             .usdc: EthAddress("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
-            .link: EthAddress("0x514910771af9ca656af840dff83e8264ecf986ca") 
+            .link: EthAddress("0x514910771af9ca656af840dff83e8264ecf986ca"),  // Link is not actually deployed on Base
+            .usdt: EthAddress("0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2"),
         ],
         .arbitrum: [
             .eth: EthAddress("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"),
             .weth: EthAddress("0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"),
             .usdc: EthAddress("0xaf88d065e77c8cC2239327C5EDb3A432268e5831"),
-            .link: EthAddress("0xf97f4df75117a78c1A5a0DBb814Af92458539FB4")
+            .link: EthAddress("0xf97f4df75117a78c1A5a0DBb814Af92458539FB4"),
+            .usdt: EthAddress("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9"),
         ],
     ]
 
@@ -1030,6 +481,8 @@ enum Token: Hashable, Equatable {
         switch self {
         case .usdc:
             return "USDC"
+        case .usdt:
+            return "USDT"
         case .eth:
             return "ETH"
         case .weth:
@@ -1043,7 +496,7 @@ enum Token: Hashable, Equatable {
 
     var decimals: Int {
         switch self {
-        case .usdc:
+        case .usdc, .usdt:
             return 6
         case .eth, .weth, .link:
             return 18
@@ -1054,7 +507,7 @@ enum Token: Hashable, Equatable {
 
     var defaultUsdPrice: Double {
         switch self {
-        case .usdc:
+        case .usdc, .usdt:
             return 1.0
         case .eth, .weth:
             return 4000.0
@@ -1126,6 +579,7 @@ enum Given {
 indirect enum When {
     case transfer(from: Account, to: Account, amount: TokenAmount, on: Network)
     case cometSupply(from: Account, market: Comet, amount: TokenAmount, on: Network)
+    case cometBorrow(from: Account, market: Comet, borrowAmount: TokenAmount, collateralAmounts: [TokenAmount], on: Network)
     case cometRepay(from: Account, market: Comet, repayAmount: TokenAmount, collateralAmounts: [TokenAmount], on: Network)
     case payWith(currency: Token, When)
 
@@ -1134,6 +588,8 @@ indirect enum When {
         case let .transfer(from, _, _, _):
             return from
         case let .cometSupply(from, _, _, _):
+            return from
+        case let .cometBorrow(from, _, _, _, _):
             return from
         case let .cometRepay(from, _, _, _, _):
             return from
@@ -1308,7 +764,35 @@ class Context {
         case let .payWith(token, intent):
             paymentToken = token
             return try await self.when(intent)
-
+        case let .cometBorrow(from, market, borrowAmount, collateralAmounts, network):
+            return try await QuarkBuilder.cometBorrow(
+                borrowIntent: .init(
+                    amount: borrowAmount.amount,
+                    assetSymbol: borrowAmount.token.symbol,
+                    blockTimestamp: 0,
+                    borrower: from.address,
+                    chainId: BigUInt(network.chainId),
+                    collateralAmounts: collateralAmounts.map {
+                        $0.amount
+                    },
+                    collateralAssetSymbols: collateralAmounts.map {
+                        $0.token.symbol
+                    },
+                    comet: market.address(network: network),
+                    preferAcross: true,
+                    paymentAssetSymbol: paymentToken?.symbol ?? when.paymentAssetSymbol
+                ),
+                chainAccountsList: chainAccounts,
+                quote: .init(
+                    quoteId: Hex(
+                        "0x00000000000000000000000000000000000000000000000000000000000000CC"),
+                    issuedAt: 0,
+                    expiresAt: BigUInt(Date(timeIntervalSinceNow: 1_000_000).timeIntervalSince1970),
+                    assetQuotes: assetQuotes,
+                    networkOperationFees: networkOperationFees
+                ),
+                withFunctions: ffis
+            )
         case let .cometRepay(from, market, repayAmount, collateralAmounts, network):
             return try await QuarkBuilder.cometRepay(
                 repayIntent: .init(
